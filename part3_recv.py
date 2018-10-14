@@ -119,8 +119,9 @@ try:
 		cnt_decode = 0
 
 		stat = []
+		res = []
 		# decode
-		while cnt_decode<NUM_TRANS:
+		while cnt_decode<11000:
 			while sig_buffer.size<cursor+FRAMECNT:
 				sig = sig_recv.get()[1]
 				sig_buffer = np.concatenate((sig_buffer,sig))
@@ -138,14 +139,16 @@ try:
 						div = sum(stat) / 100 * 0.618
 						# div = (stat[0] + stat[-1]) / 2
 				else:
-					print(1 if sigsum > div else 0, end='')
-				cnt_decode += 1
+					cnt_decode += 1
+					res.append('1' if sigsum > div else '0')
 			# print("LOOP",i,cursor)
 			cursor = i+FRAMECNT
 			if sig_buffer.size>10*FRAMECNT and False:
 				cursor = cursor-(sig_buffer.size-FRAMECNT)
 				sig_buffer = sig_buffer[-FRAMECNT:]
-			
+
+		with open('OUTPUT.txt', 'w') as fout:
+			fout.write(''.join(res[500:10500]))
 
 except KeyboardInterrupt:
 	parser.exit('Interrupted by user')
