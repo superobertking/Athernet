@@ -129,13 +129,33 @@ def handle_buffer(sig_recv):
 		while sig_buffer.size<cursor+FRAMECNT:
 			sig = sig_recv.get()[1]
 			sig_buffer = np.concatenate((sig_buffer,sig))
-		for i in range(cursor,sig_buffer.size-FRAMECNT+1,FRAMECNT):
+
+		i = cursor
+		while i<sig_buffer.size-FRAMECNT+1:
+
+		# for i in range(cursor,sig_buffer.size-FRAMECNT+1,FRAMECNT):
 		#	print("size of sig_buffer: ", sig_buffer.size)
 		#	print("size of SIG_HI: ", SIG_HI.size)
-			sig_shift = sig_buffer[i:i+FRAMECNT]*SIG_HI
-			# sig_shift = sig_shift[FRAMECNT//3:FRAMECNT*2//3]
-			# print(np.max(sig_shift), np.min(sig_shift))
-			sigsum = np.sum(sig_shift)
+
+
+			offset_best = 0
+			max_corr = 0
+
+			for offset in range(-3,4):
+				k = i+offset
+				if k<0 or k>=len(sig_buffer):
+					continue
+				sig_shift = sig_buffer[k:k+FRAMECNT]*SIG_HI
+				# sig_shift = sig_shift[FRAMECNT//3:FRAMECNT*2//3]
+				# print(np.max(sig_shift), np.min(sig_shift))
+				sigsum = np.sum(sig_shift)
+				if sigsum*sigsum>max_corr*max_corr:
+					max_corr = sigsum
+					offset_best = offset
+
+			i += offset_best
+			sigsum = max_corr
+
 			# print("* %12.6f" % (sigsum/FRAMECNT))
 			# if len(stat) < 100:
 			# 	stat.append(sigsum)
@@ -148,10 +168,13 @@ def handle_buffer(sig_recv):
 			# div = 0.15
 			cnt_decode += 1
 			res += '1' if sigsum > div else '0'
+
 			if view_offset <= i < view_offset + 10000:
 				res_split.append(i - view_offset)
 				seq_ans += [0.5 if sigsum > div else -0.5]
 				sigsum_ans += [sigsum / FRAMECNT]
+			i += FRAMECNT
+
 		# print("LOOP",i,cursor)
 		cursor = i+FRAMECNT
 		if sig_buffer.size>10*FRAMECNT and False:
