@@ -63,7 +63,7 @@ if args.list_devices:
 		parser.exit(0)
 
 try:
-	with sd.InputStream(device=args.device, channels=2, callback=receive_signal,
+	with sd.InputStream(device=args.device, channels=1, callback=receive_signal,
 						blocksize=int(samplerate * args.block_duration / 1000),
 						samplerate=samplerate):
 		
@@ -81,7 +81,7 @@ except KeyboardInterrupt:
 	# plt.plot(sig_buffer)
 	# plt.show()
 
-	np.save("data.npz", sig_buffer)
+	np.save("data", sig_buffer)
 	print("File saved")
 
 except Exception as e:

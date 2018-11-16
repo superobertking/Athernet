@@ -6,6 +6,7 @@ import time
 import argparse
 import math
 import queue
+import matplotlib.pyplot as plt
 
 usage_line = ' press <enter> to quit, +<enter> or -<enter> to change scaling '
 
@@ -58,6 +59,10 @@ def receive_signal(indata, frames, time, status):
 		sig_recv.put(t)
 		# print(t)
 		# cnt_callback -= 1
+
+def decode(key):
+	return key
+	# return LUT_54[key]
 
 def handle_buffer(sig_recv):
 	# synchronize
@@ -114,9 +119,13 @@ def handle_buffer(sig_recv):
 	cnt_decode = 0
 
 	stat = []
-	res = []
+	res = ''
 	# decode
-	while cnt_decode<11000:
+	res_split = []
+	seq_ans = []
+	sigsum_ans = []
+	view_offset = 0
+	while cnt_decode<NUM_TRANS:
 		while sig_buffer.size<cursor+FRAMECNT:
 			sig = sig_recv.get()[1]
 			sig_buffer = np.concatenate((sig_buffer,sig))
@@ -124,18 +133,25 @@ def handle_buffer(sig_recv):
 		#	print("size of sig_buffer: ", sig_buffer.size)
 		#	print("size of SIG_HI: ", SIG_HI.size)
 			sig_shift = sig_buffer[i:i+FRAMECNT]*SIG_HI
+			# sig_shift = sig_shift[FRAMECNT//3:FRAMECNT*2//3]
 			# print(np.max(sig_shift), np.min(sig_shift))
 			sigsum = np.sum(sig_shift)
 			# print("* %12.6f" % (sigsum/FRAMECNT))
-			if len(stat) < 100:
-				stat.append(sigsum)
-				if len(stat) == 100:
-					# stat = sorted(stat)
-					div = sum(stat) / 100 * 0.618
-					# div = (stat[0] + stat[-1]) / 2
-			else:
-				cnt_decode += 1
-				res.append('1' if sigsum > div else '0')
+			# if len(stat) < 100:
+			# 	stat.append(sigsum)
+			# 	if len(stat) == 100:
+			# 		# stat = sorted(stat)
+			# 		div = sum(stat) / 100 * 0.618
+			# 		# div = (stat[0] + stat[-1]) / 2
+			# else:
+			div = 0
+			# div = 0.15
+			cnt_decode += 1
+			res += '1' if sigsum > div else '0'
+			if view_offset <= i < view_offset + 10000:
+				res_split.append(i - view_offset)
+				seq_ans += [0.5 if sigsum > div else -0.5]
+				sigsum_ans += [sigsum / FRAMECNT]
 		# print("LOOP",i,cursor)
 		cursor = i+FRAMECNT
 		if sig_buffer.size>10*FRAMECNT and False:
@@ -143,12 +159,27 @@ def handle_buffer(sig_recv):
 			sig_buffer = sig_buffer[-FRAMECNT:]
 
 	with open('OUTPUT.txt', 'w') as fout:
-		fout.write(''.join(res[500:10500]))
+		res_trunc = res[:NUM_TRANS]
+		fout.write(res_trunc)
+		# res_trunc = res[:NUM_TRANS_45]
+		# print(len(res_trunc), NUM_TRANS_45)
+		# fout.write(''.join(['{:04b}'.format(decode(int(res_trunc[i*5:i*5+5], 2))) for i in range(NUM_TRANS_45 // 5)]))
 
+	print(len(sig_buffer))
+	print(cnt_decode)
+
+	fig = plt.figure()
+	plt.plot(sig_buffer[view_offset:view_offset + 10000])
+	plt.plot(res_split, seq_ans, '-g')
+	plt.plot(res_split, sigsum_ans, '-g')
+	for i in res_split:
+		plt.plot([i,i], [-1,1], '-r')
+	print(len(res_split))
+	# plt.show()
 
 def read_device():
 	try:
-		with sd.InputStream(device=args.device, channels=2, callback=receive_signal,
+		with sd.InputStream(device=args.device, channels=1, callback=receive_signal,
 							blocksize=int(samplerate * args.block_duration / 1000),
 							samplerate=samplerate):
 			handle_buffer(sig_recv)
@@ -164,7 +195,7 @@ def read_file(filename):
 	filedata = np.load(filename)
 	q = queue.Queue()
 	q.put((None,filedata,None))
-	q.put((None,filedata,None))
+	q.put((None,np.array([]),None))
 	handle_buffer(q)
 
 
