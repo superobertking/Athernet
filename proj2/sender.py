@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-17 21:14:11
+# @Last Modified time: 2018-11-18 00:57:31
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -25,9 +25,12 @@ class Sender(object):
 		self._stopped = threading.Event()
 
 	def _task(self):
+		print('sender task started')
 		while True:
 			payload, sent = self._sending_queue.get()
+			print('get payload len', len(payload))
 			if not self._running.is_set():
+				print('shuting down sender')
 				break
 
 			modulated_data = self._payload2signal(payload)
@@ -37,8 +40,10 @@ class Sender(object):
 				sent.set()
 
 	def start(self):
+		print('starting sender')
 		self._running.set()
 		self._daemon_thread.start()
+		print('started sender')
 
 	def shutdown(self):
 		self._running.clear()
