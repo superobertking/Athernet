@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 05:21:33
+# @Last Modified time: 2018-11-18 06:01:54
 
 
 from sender import Sender
@@ -161,7 +161,7 @@ class MAC(object):
 
 		start_time = datetime.now()
 
-		packet = []
+		packet = {}
 
 		print('frame_cnt is', frame_cnt)
 
@@ -177,7 +177,7 @@ class MAC(object):
 			elif self._is_data(received_frame):
 				frame_id, data = self._extract_data(received_frame)
 				self._tx.send(np.concatenate((MAC_FRAME_TYPE.ACK, np.array([frame_id], dtype=np.uint8))))
-				packet.append(data)
+				packet[frame_id] = data
 				print('received data', frame_id)
 
 		# print('waiting end')
@@ -192,4 +192,4 @@ class MAC(object):
 
 		print(end_time - start_time)
 		
-		return np.concatenate(packet)
+		return np.concatenate([packet[i] for i in sorted(packet.keys())])

@@ -2,5 +2,4 @@
 .DS_Store
 *.npy
 *.txt
-*/OUTPUT.bin
-*/OUTPUT.txt
+OUTPUT*.*

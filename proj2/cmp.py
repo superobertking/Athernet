@@ -2,12 +2,15 @@
 # @Author: robertking
 # @Date:   2018-10-14 20:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 02:21:30
+# @Last Modified time: 2018-11-18 05:51:04
 
 
 import numpy as np
 import sys
 
+
+out_filename = sys.argv[1] if len(sys.argv) > 1 else 'OUTPUT.bin'
+in_filename = sys.argv[2] if len(sys.argv) > 2 else 'INPUT.bin'
 
 with open('OUTPUT.bin', 'rb') as f:
     t1 = np.array([int(x) for x in f.read().strip()])
