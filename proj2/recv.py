@@ -7,7 +7,7 @@ import argparse
 import math
 import queue
 from datetime import datetime
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 
 def int_or_str(text):
@@ -198,14 +198,14 @@ def handle_buffer(sig_recv):
 	print(len(sig_buffer))
 	print(cnt_decode)
 
-	# fig = plt.figure()
-	# plt.plot(sig_buffer[view_offset:view_offset + 10000])
-	# plt.plot(res_split, seq_ans, '-g')
-	# plt.plot(res_split, sigsum_ans, '-g')
-	# for i in res_split:
-	# 	plt.plot([i,i], [-1,1], '-r')
-	# print(len(res_split))
-	# plt.show()
+	fig = plt.figure()
+	plt.plot(sig_buffer[view_offset:view_offset + 10000])
+	plt.plot(res_split, seq_ans, '-g')
+	plt.plot(res_split, sigsum_ans, '-b')
+	for i in res_split:
+		plt.plot([i,i], [-1,1], '-r')
+	print(len(res_split))
+	plt.show()
 
 def read_device():
 	try:
