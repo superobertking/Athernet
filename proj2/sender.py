@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-17 20:07:59
+# @Last Modified time: 2018-11-17 21:14:11
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -49,7 +49,7 @@ class Sender(object):
 		"""\
 		payload: np array of uint8
 		"""
-		print(list(payload))
+		# print(list(payload))
 		if len(payload) >= 2 ** 16:
 			raise ValueError('Payload length overflow')
 
@@ -64,7 +64,7 @@ class Sender(object):
 		crc = np.array([], dtype=np.uint8)
 		# data = np.concatenate((payload, crc))
 		data = np.concatenate((payload_header, payload, crc))
-		print(data)
+		# print(data)
 		modulated_data = np.concatenate([klass._modulate(klass._encode(b)) for b in data])
 		modulated_data = np.concatenate((PREAMBLE, modulated_data))
 		return modulated_data

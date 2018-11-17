@@ -38,6 +38,7 @@ SIG_LO = -1 * np.sin(2 * np.pi * FREQ_HI * np.linspace(0, DURATION, FRAMECNT))
 
 LUT_SIG = {1: SIG_HI, 0: SIG_LO}
 LUT_MOD = {k: np.concatenate([LUT_SIG[(k >> (3-i)) & 1] for i in range(4)]) for k in LUT_45}
+LUT_MOD = {k: np.concatenate([LUT_SIG[(k >> (3-i)) & 1] for i in range(4)]) for k in range(256)}
 
 header_duration = 0.4
 HEADER_FRAMECNT = int(header_duration*SAMPLERATE)//2*2

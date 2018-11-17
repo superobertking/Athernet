@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 18:58:36
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-17 20:01:03
+# @Last Modified time: 2018-11-17 21:05:06
 
 
 from constants import NUM_TRANS
@@ -26,7 +26,7 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
 	with open('INPUT.bin', 'rb') as f:
-		raw_data = f.read()[:2]
+		raw_data = f.read()
 
 	sender = Sender(device=args.device)
 	sender.start()

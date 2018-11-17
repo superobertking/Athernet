@@ -2,17 +2,17 @@
 # @Author: robertking
 # @Date:   2018-10-14 20:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-17 02:47:46
+# @Last Modified time: 2018-11-17 21:15:19
 
 
 import numpy as np
 import sys
 
 
-with open('OUTPUT.txt') as f:
+with open('OUTPUT.bin', 'rb') as f:
     t1 = np.array([int(x) for x in f.read().strip()])
 
-with open('INPUT.txt') as f:
+with open('INPUT.bin', 'rb') as f:
     t2 = np.array([int(x) for x in f.read().strip()])[:len(t1)*2]
 
 

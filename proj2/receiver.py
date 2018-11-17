@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:42:10
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-17 20:09:43
+# @Last Modified time: 2018-11-17 21:44:58
 
 
 from constants import *
@@ -57,9 +57,9 @@ class Receiver(object):
 				if power > 1 and rate > 60:
 					time_detach = 0
 					if rate > max_rate:
-						# print("big rate",rate)
 						max_rate = rate
 						cursor_align = i
+					print("big rate",rate)
 				else:
 					if cursor_align is None:
 						continue
@@ -90,7 +90,7 @@ class Receiver(object):
 			for _ in range(8):
 				while self._sig_buffer.size < cursor + SAMPLESIZE + max(BIAS_SELECTIONS):
 					sig = self._sig_recv.get()
-					self._sig_buffer = np.concatenate((self._sig_buffer,sig))
+					self._sig_buffer = np.concatenate((self._sig_buffer, sig))
 
 				# Calibrate PSK frequency shift
 				offset_best = 0
@@ -115,20 +115,20 @@ class Receiver(object):
 
 				cursor += SAMPLESIZE
 
-			if self._sig_buffer.size > 10 * SAMPLESIZE:
-				cursor -= self._sig_buffer.size - SAMPLESIZE * 2
-				self._sig_buffer = self._sig_buffer[-SAMPLESIZE * 2:]
+			if cursor > 256 * SAMPLESIZE:
+				self._sig_buffer = self._sig_buffer[cursor + min(BIAS_SELECTIONS):]
+				cursor = -min(BIAS_SELECTIONS)
 
 			return decoded_byte
 
 		payload_length = (_extract_byte() << 8) | _extract_byte()
-		print(payload_length)
+		print('payload_length is', payload_length)
 		payload = [_extract_byte() for _ in range(payload_length)]
 
 		self._sig_buffer = self._sig_buffer[cursor:]
 
 		end_time = datetime.now()
-		# print(end_time - start_time)
+		print(end_time - start_time)
 
 		return np.array(payload, dtype=np.uint8)
 

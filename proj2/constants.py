@@ -33,12 +33,12 @@ FREQ_LO = 4000
 # FRAMECNT = 24000
 # SAMPLESIZE = FRAMECNT
 # DURATION = 0.5
-FRAMECNT = 6
+FRAMECNT = 3
 SAMPLESIZE = FRAMECNT
-DURATION = 0.000125
-FRAMECNT = 48
-SAMPLESIZE = FRAMECNT
-DURATION = 0.001
+DURATION = 0.0000625
+# FRAMECNT = 48
+# SAMPLESIZE = FRAMECNT
+# DURATION = 0.001
 
 SIG_HI = np.sin(2 * np.pi * FREQ_HI * np.linspace(0, DURATION, FRAMECNT, endpoint=False))
 # SIG_LO = np.sin(2 * np.pi * FREQ_LO * np.linspace(0, DURATION, FRAMECNT, endpoint=False))
@@ -49,7 +49,7 @@ LUT_MOD_4 = {k: np.concatenate([LUT_SIG[(k >> (3-i)) & 1] for i in range(4)]) fo
 LUT_MOD_5 = {k: np.concatenate([LUT_SIG[(k >> (4-i)) & 1] for i in range(5)]) for k in LUT_54}
 LUT_MOD = {k: np.concatenate([LUT_SIG[(k >> (7-i)) & 1] for i in range(8)]) for k in range(256)}
 
-header_duration = 0.01
+header_duration = 0.004
 HEADER_FRAMECNT = int(header_duration*SAMPLERATE)//2*2
 PREAMBLE_SAMPLESIZE = HEADER_FRAMECNT
 header_time = np.linspace(0,header_duration,HEADER_FRAMECNT)
