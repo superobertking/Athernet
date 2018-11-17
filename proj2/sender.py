@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 03:46:05
+# @Last Modified time: 2018-11-18 05:28:41
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -11,6 +11,11 @@ import sounddevice as sd
 import numpy as np
 import queue
 import threading
+import binascii
+from auxiliaries import *
+import reedsolo
+
+rs_codec = reedsolo.RSCodec(4)
 
 
 class Sender(object):
@@ -68,8 +73,8 @@ class Sender(object):
 
 	@classmethod
 	def _payload2signal(klass, payload):
-		payload_header = np.array([(len(payload) >> 8) & 0xff, len(payload) & 0xff], dtype=np.uint8)
-		crc = np.array([], dtype=np.uint8)
+		payload_header = np.frombuffer(rs_codec.encode(bytes([(len(payload) >> 8) & 0xff, len(payload) & 0xff])), dtype=np.uint8)
+		crc = convi2b(binascii.crc32(bytes(payload)) & 0xffffffff, 4)
 		# data = np.concatenate((payload, crc))
 		data = np.concatenate((payload_header, payload, crc))
 		# print(data)

@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:42:10
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 03:29:19
+# @Last Modified time: 2018-11-18 05:38:28
 
 
 from constants import *
@@ -13,6 +13,12 @@ import math
 import threading
 import queue
 from datetime import datetime
+import reedsolo
+import binascii
+from auxiliaries import *
+
+
+rs_codec = reedsolo.RSCodec(4)
 
 
 class Receiver(object):
@@ -121,9 +127,25 @@ class Receiver(object):
 
 			return decoded_byte
 
-		payload_length = (_extract_byte() << 8) | _extract_byte()
+		try:
+			raw_payload_length = [_extract_byte() for _ in range(6)]
+			payload_length = rs_codec.decode(bytes(raw_payload_length))
+		except reedsolo.ReedSolomonError:
+			print('Cannot recover payload_length')
+			self._sig_buffer = self._sig_buffer[cursor:]
+			return np.array([], dtype=np.uint8)
+		payload_length = payload_length[0] << 8 | payload_length[1]
 		print('payload_length is', payload_length)
+
 		payload = [_extract_byte() for _ in range(payload_length)]
+
+		crc = binascii.crc32(bytes(payload)) & 0xffffffff
+		raw_crc = convb2i(_extract_byte() for _ in range(4))
+
+		if crc != raw_crc:
+			print('Wrong CRC detected {:08x} {:08x}'.format(crc, raw_crc))
+			self._sig_buffer = self._sig_buffer[cursor:]
+			return np.array([], dtype=np.uint8)
 
 		self._sig_buffer = self._sig_buffer[cursor:]
 

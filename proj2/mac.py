@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 04:22:39
+# @Last Modified time: 2018-11-18 05:21:33
 
 
 from sender import Sender
@@ -10,6 +10,7 @@ from receiver import Receiver
 import numpy as np
 import queue
 from datetime import datetime
+from auxiliaries import *
 
 MAC_DATA_HEADER_LEN = 2
 
@@ -67,21 +68,10 @@ class MAC(object):
 		else:
 			raise ValueError('Link Error: Transmit failed after {} retials'.format(self._max_retries))
 
-	@staticmethod
-	def _convi2b(tx_cnt, bts):
-		return np.array([(tx_cnt >> (8*(bts-i-1))) & 0xff for i in range(bts)], dtype=np.uint8)
-
-	@staticmethod
-	def _convb2i(buf):
-		data = 0
-		for x in buf:
-			data = (data << 8) | x
-		return data
-
 	def send(self, packet):
 		self._tx_cnt += 1
-		packet_id = self._convi2b(self._tx_cnt, 4)
-		packet_length = self._convi2b(len(packet), 4)
+		packet_id = convi2b(self._tx_cnt, 4)
+		packet_length = convi2b(len(packet), 4)
 
 		# max fragment unit
 		mfu = self._mtu - MAC_DATA_HEADER_LEN
@@ -117,7 +107,7 @@ class MAC(object):
 		data = np.concatenate((data[:1], data[9:]))
 		if not klass._is_start(data):
 			return (None, None, None)
-		return klass._convb2i(data[1:5]), klass._convb2i(data[5:9]), data[9]
+		return convb2i(data[1:5]), convb2i(data[5:9]), data[9]
 
 	@classmethod
 	def _extract_data(klass, data):
@@ -129,7 +119,7 @@ class MAC(object):
 	def _extract_end(klass, data):
 		if not klass._is_end(data):
 			return None
-		return klass._convb2i(data[1:])
+		return convb2i(data[1:])
 
 	@classmethod
 	def _extract_ack(klass, data):
