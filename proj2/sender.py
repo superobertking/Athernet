@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 00:57:31
+# @Last Modified time: 2018-11-18 03:46:05
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -28,7 +28,8 @@ class Sender(object):
 		print('sender task started')
 		while True:
 			payload, sent = self._sending_queue.get()
-			print('get payload len', len(payload))
+			if payload is not None:
+				print('get payload len', len(payload))
 			if not self._running.is_set():
 				print('shuting down sender')
 				break
@@ -58,10 +59,12 @@ class Sender(object):
 		if len(payload) >= 2 ** 16:
 			raise ValueError('Payload length overflow')
 
-		sent = threading.Event() if wait else None
+		sent = threading.Event()
 		self._sending_queue.put((payload[:], sent))
 		if wait:
 			sent.wait()
+		else:
+			return sent
 
 	@classmethod
 	def _payload2signal(klass, payload):
