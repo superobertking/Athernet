@@ -6,9 +6,8 @@ import time
 import argparse
 import math
 import queue
-import matplotlib.pyplot as plt
-
-usage_line = ' press <enter> to quit, +<enter> or -<enter> to change scaling '
+from datetime import datetime
+# import matplotlib.pyplot as plt
 
 
 def int_or_str(text):
@@ -116,6 +115,8 @@ def handle_buffer(sig_recv):
 	cursor = 0
 	print("gap skipped, start decoding")
 
+	start_time = datetime.now()
+
 	cnt_decode = 0
 
 	stat = []
@@ -183,6 +184,10 @@ def handle_buffer(sig_recv):
 			cursor = cursor-(sig_buffer.size-FRAMECNT)
 			sig_buffer = sig_buffer[-FRAMECNT:]
 
+	end_time = datetime.now()
+
+	print(end_time - start_time)
+
 	with open('OUTPUT.txt', 'w') as fout:
 		res_trunc = res[:NUM_TRANS]
 		fout.write(''.join(res_trunc))
@@ -205,8 +210,8 @@ def handle_buffer(sig_recv):
 def read_device():
 	try:
 		with sd.InputStream(device=args.device, channels=1, callback=receive_signal,
-							samplerate=samplerate):
-							# blocksize=int(samplerate * args.block_duration / 1000),
+							samplerate=SAMPLERATE):
+							# blocksize=int(SAMPLERATE * args.block_duration / 1000),
 			handle_buffer(sig_recv)
 	except KeyboardInterrupt:
 		# parser.exit('Interrupted by user')
