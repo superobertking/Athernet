@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-10-14 20:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-17 01:18:46
+# @Last Modified time: 2018-11-17 02:47:46
 
 
 import numpy as np
@@ -22,7 +22,7 @@ off = []
 print(len(t1), len(t2))
 assert(len(t1) <= len(t2))
 
-for i in range(len(t2) - len(t1)):
+for i in range(len(t2) - len(t1) + 1):
     tt = t2[i:i+len(t1)]
     if np.sum(t1 == tt) > maxi:
         maxi = np.sum(t1 == tt)

@@ -119,14 +119,15 @@ def handle_buffer(sig_recv):
 	cnt_decode = 0
 
 	stat = []
-	res = ''
+	res = []
 	# decode
 	res_split = []
 	seq_ans = []
 	sigsum_ans = []
 	view_offset = 0
+	corr_bias = list(range(-1, 2))
 	while cnt_decode<NUM_TRANS:
-		while sig_buffer.size<cursor+FRAMECNT:
+		while sig_buffer.size<cursor+FRAMECNT+max(corr_bias):
 			sig = sig_recv.get()[1]
 			sig_buffer = np.concatenate((sig_buffer,sig))
 
@@ -141,10 +142,11 @@ def handle_buffer(sig_recv):
 			offset_best = 0
 			max_corr = 0
 
-			for offset in range(-3,4):
+			for offset in corr_bias:
 				k = i+offset
-				if k<0 or k>=len(sig_buffer):
+				if k<0 or k+FRAMECNT>=len(sig_buffer):
 					continue
+
 				sig_shift = sig_buffer[k:k+FRAMECNT]*SIG_HI
 				# sig_shift = sig_shift[FRAMECNT//3:FRAMECNT*2//3]
 				# print(np.max(sig_shift), np.min(sig_shift))
@@ -167,7 +169,7 @@ def handle_buffer(sig_recv):
 			div = 0
 			# div = 0.15
 			cnt_decode += 1
-			res += '1' if sigsum > div else '0'
+			res.append('1' if sigsum > div else '0')
 
 			if view_offset <= i < view_offset + 10000:
 				res_split.append(i - view_offset)
@@ -176,14 +178,14 @@ def handle_buffer(sig_recv):
 			i += FRAMECNT
 
 		# print("LOOP",i,cursor)
-		cursor = i+FRAMECNT
+		cursor = i
 		if sig_buffer.size>10*FRAMECNT and False:
 			cursor = cursor-(sig_buffer.size-FRAMECNT)
 			sig_buffer = sig_buffer[-FRAMECNT:]
 
 	with open('OUTPUT.txt', 'w') as fout:
 		res_trunc = res[:NUM_TRANS]
-		fout.write(res_trunc)
+		fout.write(''.join(res_trunc))
 		# res_trunc = res[:NUM_TRANS_45]
 		# print(len(res_trunc), NUM_TRANS_45)
 		# fout.write(''.join(['{:04b}'.format(decode(int(res_trunc[i*5:i*5+5], 2))) for i in range(NUM_TRANS_45 // 5)]))
@@ -191,20 +193,20 @@ def handle_buffer(sig_recv):
 	print(len(sig_buffer))
 	print(cnt_decode)
 
-	fig = plt.figure()
-	plt.plot(sig_buffer[view_offset:view_offset + 10000])
-	plt.plot(res_split, seq_ans, '-g')
-	plt.plot(res_split, sigsum_ans, '-g')
-	for i in res_split:
-		plt.plot([i,i], [-1,1], '-r')
-	print(len(res_split))
+	# fig = plt.figure()
+	# plt.plot(sig_buffer[view_offset:view_offset + 10000])
+	# plt.plot(res_split, seq_ans, '-g')
+	# plt.plot(res_split, sigsum_ans, '-g')
+	# for i in res_split:
+	# 	plt.plot([i,i], [-1,1], '-r')
+	# print(len(res_split))
 	# plt.show()
 
 def read_device():
 	try:
 		with sd.InputStream(device=args.device, channels=1, callback=receive_signal,
-							blocksize=int(samplerate * args.block_duration / 1000),
 							samplerate=samplerate):
+							# blocksize=int(samplerate * args.block_duration / 1000),
 			handle_buffer(sig_recv)
 	except KeyboardInterrupt:
 		# parser.exit('Interrupted by user')
