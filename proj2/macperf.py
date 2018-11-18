@@ -2,13 +2,15 @@
 # @Author: robertking
 # @Date:   2018-11-18 18:39:54
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 20:23:55
+# @Last Modified time: 2018-11-18 22:05:24
 
 
 from mac import MAC
 
 import argparse
 import numpy as np
+import datetime
+import time
 
 
 def int_or_str(text):
@@ -34,7 +36,12 @@ args = parser.parse_args()
 if __name__ == '__main__':
 	with MAC(addr=args.src_addr, rx_device=args.recv_device, tx_device=args.send_device,
 			  ack_timeout=0.5, max_retries=20, mtu=args.mtu) as mac:
-		while True:
+		sum_mfu = 0
+		sum_timediff = datetime.timedelta()
+		for i in range(10):
 			mfu, timediff = mac.perf(args.dst_addr)
-			print('macperf: {} bytes received in {} time, throughput = {} kbps'.format(
-				mfu, timediff.total_seconds(), mfu * 8 / 1000 / timediff.total_seconds()))
+			sum_mfu += mfu
+			sum_timediff += timediff
+		print('macperf: {} bytes received in {} time, throughput = {} kbps'.format(
+			sum_mfu, sum_timediff.total_seconds(), sum_mfu * 8 / 1000 / sum_timediff.total_seconds()))
+		time.sleep(10)
