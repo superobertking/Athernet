@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 05:28:41
+# @Last Modified time: 2018-11-18 18:20:19
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -27,10 +27,51 @@ class Sender(object):
 		self._sending_queue = queue.Queue()
 		self._daemon_thread = threading.Thread(target=self._task, daemon=True)
 		self._running = threading.Event()
-		self._stopped = threading.Event()
+		self._should_stop = threading.Event()
+		self._play_buffer = np.array([], dtype=np.float32)
+
+	def _callback(self, outdata, frames, time, status):
+		if status:
+			print("Error occurs %r" % status)
+		while self._play_buffer.size < frames:
+			try:
+				payload, sent = self._sending_queue.get_nowait()
+				if payload is not None:
+					self._play_buffer = np.concatenate((self._play_buffer, payload))
+				if sent:
+					sent.set()
+			except queue.Empty:
+				# print('callback go empty')
+				outdata[:,0] = np.concatenate((self._play_buffer, np.zeros(frames - self._play_buffer.size, dtype=np.float32)))
+				self._play_buffer = np.array([], dtype=np.float32)
+				if self._should_stop.is_set():
+					raise sd.CallbackStop
+				return
+		# print('callback go normoally')
+		outdata[:,0] = self._play_buffer[:frames]
+		self._play_buffer = self._play_buffer[frames:]
+
+		if self._should_stop.is_set():
+			raise sd.CallbackStop
 
 	def _task(self):
 		print('sender task started')
+		# with sd.OutputStream(samplerate=SAMPLERATE, channels=1, dtype=np.float32,
+		# 					blocksize=512,
+		#             		callback=self._callback, **self._kwargs):
+		# 	self._should_stop.wait()
+
+		# with sd.OutputStream(samplerate=SAMPLERATE, channels=1, dtype=np.float32, **self._kwargs) as stream:
+		# 	while True:
+		# 		payload, sent = self._sending_queue.get()
+		# 		if payload is not None:
+		# 			stream.write(payload)
+		# 		if not self._running.is_set():
+		# 			print('shuting down sender')
+		# 			break
+		# 		if sent:
+		# 			sent.set()
+
 		while True:
 			payload, sent = self._sending_queue.get()
 			if payload is not None:
@@ -38,12 +79,10 @@ class Sender(object):
 			if not self._running.is_set():
 				print('shuting down sender')
 				break
-
-			modulated_data = self._payload2signal(payload)
-
-			sd.play(modulated_data, blocking=True, samplerate=SAMPLERATE, **self._kwargs)
+			sd.play(payload, blocking=True, samplerate=SAMPLERATE, **self._kwargs)
 			if sent:
 				sent.set()
+
 
 	def start(self):
 		print('starting sender')
@@ -53,6 +92,7 @@ class Sender(object):
 
 	def shutdown(self):
 		self._running.clear()
+		self._should_stop.set()
 		self._sending_queue.put((None, None))
 		self._daemon_thread.join()
 
@@ -65,11 +105,17 @@ class Sender(object):
 			raise ValueError('Payload length overflow')
 
 		sent = threading.Event()
-		self._sending_queue.put((payload[:], sent))
+		self._sending_queue.put((self._payload2signal(payload), sent))
 		if wait:
 			sent.wait()
 		else:
 			return sent
+
+	def send_no_queue(self, payload, wait=True):
+		if len(payload) >= 2 ** 16:
+			raise ValueError('Payload length overflow')
+
+		sd.play(self._payload2signal(payload), blocking=True, samplerate=SAMPLERATE, **self._kwargs)
 
 	@classmethod
 	def _payload2signal(klass, payload):
@@ -80,7 +126,7 @@ class Sender(object):
 		# print(data)
 		modulated_data = np.concatenate([klass._modulate(klass._encode(b)) for b in data])
 		modulated_data = np.concatenate((PREAMBLE, modulated_data))
-		return modulated_data
+		return np.array(modulated_data, dtype=np.float32)
 
 	@staticmethod
 	def _encode(data):

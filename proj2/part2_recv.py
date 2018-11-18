@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 19:07:52
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 00:40:36
+# @Last Modified time: 2018-11-18 18:06:46
 
 
 import argparse
@@ -26,7 +26,7 @@ parser.add_argument('-t', '--send-device', type=int_or_str,
 args = parser.parse_args()
 
 if __name__ == '__main__':
-	mac = MAC(rx_device=args.recv_device, tx_device=args.send_device)
+	mac = MAC(addr=0x77, rx_device=args.recv_device, tx_device=args.send_device)
 	mac.start()
 
 	packet = mac.recv()

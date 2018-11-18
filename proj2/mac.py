@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 06:01:54
+# @Last Modified time: 2018-11-18 18:18:40
 
 
 from sender import Sender
@@ -11,55 +11,158 @@ import numpy as np
 import queue
 from datetime import datetime
 from auxiliaries import *
+import threading
 
-MAC_DATA_HEADER_LEN = 2
+MAC_HEADER_LEN = 5
 
-class MAC_FRAME_TYPE:
+TYPES = ['ACK', 'START', 'DATA', 'PING', 'PONG']
+class MACTYPE:
 	pass
 
-for i, name in enumerate(['ACK', 'CTRL_START', 'CTRL_END', 'DATA']):
-	setattr(MAC_FRAME_TYPE, name, np.array([i], dtype=np.uint8))
+for i, t in enumerate(TYPES):
+	setattr(MACTYPE, t, i)
 
-
-# CTRL_START : PACKET_ID (4B) PACKET_LENGTH (4B) FRAME_CNT (1B)
-# DATA       : FRAME_ID  (1B) PAYLOAD(-MTU)
-# CTRL_END   : PACKET_ID (4B)
-# ACK        : ID (1B): 0-250 (DATA/FRAME_ID) 254 (START) 255 (END)
+# START    : DST (1B) SRC (1B) TYPE (1B) FRAME_ID (2B) FRAME_CNT (1B)
+# DATA     : DST (1B) SRC (1B) TYPE (1B) FRAME_ID (2B) PAYLOAD(-MTU)
+# ACK      : DST (1B) SRC (1B) TYPE (1B) FRAME_ID (2B)
+# PING     : DST (1B) SRC (1B) TYPE (1B) FRAME_ID (2B)
+# PONG     : DST (1B) SRC (1B) TYPE (1B) FRAME_ID (2B)
 
 class MAC(object):
 	"""MAC class using physical link classes"""
-	def __init__(self, mtu=1500, tx_device=None, rx_device=None, max_retries=5, ack_timeout=0.2):
+	def __init__(self, addr=1, mtu=1500, tx_device=None, rx_device=None, max_retries=5, ack_timeout=0.2):
 		super(MAC, self).__init__()
 		self._mtu = mtu
+		self._addr = addr
 		self._tx = Sender(device=tx_device)
 		self._rx = Receiver(device=rx_device)
 		self._tx_cnt = 0
 		self._max_retries = max_retries
 		self._ack_timeout = ack_timeout
+		self._received_packets = []
+		self._ack_queue = queue.Queue()
+		self._pong_queue = queue.Queue()
+		self._net_queue = queue.Queue()
+		self._frame_tick = 0
+		self._work_thread = threading.Thread(target=self._work, daemon=True)
+		self._stop_working = threading.Event()
 
-	# def __enter__
-	# def __exit__
+	def __enter__(self):
+		self.start()
+		return self
+	
+	def __exit__(self, t,v,tb):
+		self.shutdown()
 
 	def start(self):
 		self._rx.start()
 		self._tx.start()
+		self._work_thread.start()
 
 	def shutdown(self):
+		self._stop_working.set()
+		self._work_thread.join()
 		self._rx.shutdown()
 		self._tx.shutdown()
 
-	def _stop_and_wait(self, payload):
+	@staticmethod
+	def _symbol(i):
+		return np.array([i], dtype=np.uint8)
+
+	@staticmethod
+	def _extract_frame(frame):
+		if frame.size < MAC_HEADER_LEN:
+			return None, None, None, None, None
+		return frame[0], frame[1], frame[2], convb2i(frame[3:5]), frame[5:]
+
+	@staticmethod
+	def _is_type(frame, mac_type):
+		if frame.size < MAC_HEADER_LEN:
+			return False
+		if mac_type == MACTYPE.DATA:
+			return frame[2] == MACTYPE.DATA
+		if mac_type == MACTYPE.ACK:
+			return frame[2] == MACTYPE.ACK
+		if mac_type == MACTYPE.START:
+			return frame.size == MAC_HEADER_LEN + 1 and frame[2] == MACTYPE.START
+		if mac_type == MACTYPE.PING:
+			return frame[2] == MACTYPE.PING
+		if mac_type == MACTYPE.PONG:
+			return frame[2] == MACTYPE.PONG
+		return False
+
+	def _gen_frame_id(self, cnt=1):
+		self._frame_tick += cnt
+		return range(self._frame_tick - cnt, self._frame_tick)
+
+	def _work(self):
+		packet_buffer = np.array([], np.uint8)
+
+		class STATE:
+			pass
+		for i, name in enumerate(['GET_START', 'GET_DATA']):
+			setattr(STATE, name, i)
+
+		state = STATE.GET_START
+
+		last_frame_id = -1
+		frame_cnt = 0
+		while not self._stop_working.is_set():
+			try:
+				frame = self._rx.recv(timeout=1)
+				dst, src, mac_type, frame_id, payload = self._extract_frame(frame)
+			except queue.Empty:
+				dst = None
+			if self._stop_working.is_set():
+				break
+			if dst != self._addr:
+				continue
+			print('in _work, get frame_id', frame_id)
+			if self._is_type(frame, MACTYPE.DATA):
+				print('in _work, get data frame_id', frame_id)
+				self._send_ack(src, frame_id)
+				if state != STATE.GET_DATA:
+					continue
+				if frame_id != last_frame_id + 1:
+					continue
+				last_frame_id = frame_id
+				packet_buffer = np.concatenate((packet_buffer, payload))
+				if frame_id == frame_cnt:
+					self._net_queue.put(packet_buffer)
+					state = STATE.GET_START
+			elif self._is_type(frame, MACTYPE.START):
+				print('in _work, get start frame_id', frame_id)
+				self._send_ack(src, frame_id)
+				if state != STATE.GET_START:
+					continue
+				frame_cnt = convb2i(payload)
+				last_frame_id = frame_id
+				packet_buffer = np.array([], np.uint8)
+				state = STATE.GET_DATA
+			elif self._is_type(frame, MACTYPE.ACK):
+				self._ack_queue.put((src, frame_id))
+			elif self._is_type(frame, MACTYPE.PING):
+				self._send_pong(src, frame_id)
+			elif self._is_type(frame, MACTYPE.PONG):
+				self._pong_queue.put(frame_id)
+			else:
+				pass
+
+	def ping(self, dst):
+		frame_id = self._gen_frame_id()
+		self._send_ping(dst, frame_id)
+
+	def _stop_and_wait(self, dst, mac_type, frame_id, payload):
 		retry = 0
 		while retry < self._max_retries:
 			retry += 1
 			print('trial {} start'.format(retry))
-			print('trial {} sending'.format(retry))
-			print(len(payload))
-			self._tx.send(payload)
+			self._send_frame(dst, mac_type, frame_id, payload)
 			print('trial {} sent'.format(retry))
 			try:
 				print('trial {} receiving'.format(retry))
-				self._extract_ack(self._rx.recv(timeout=self._ack_timeout))
+				src, ack_frame_id = self._ack_queue.get(timeout=self._ack_timeout)
+				assert ack_frame_id == frame_id
 				print('trial {} received'.format(retry))
 				break
 			except queue.Empty:
@@ -68,128 +171,42 @@ class MAC(object):
 		else:
 			raise ValueError('Link Error: Transmit failed after {} retials'.format(self._max_retries))
 
-	def send(self, packet):
-		self._tx_cnt += 1
-		packet_id = convi2b(self._tx_cnt, 4)
+	def _send_frame(self, dst, mac_type, frame_id, payload=np.array([], dtype=np.uint8)):
+		self._tx.send(np.concatenate((
+			np.array([dst, self._addr, mac_type], dtype=np.uint8),
+			convi2b(frame_id, 2), payload
+		)))
+
+	def _send_ack(self, dst, frame_id):
+		self._send_frame(dst, MACTYPE.ACK, frame_id)
+
+	def _send_ping(self, dst, frame_id):
+		self._send_frame(dst, MACTYPE.PING, frame_id)
+
+	def _send_pong(self, dst, frame_id):
+		self._send_frame(dst, MACTYPE.PONG, frame_id)
+
+	def send(self, dst, packet):
 		packet_length = convi2b(len(packet), 4)
 
 		# max fragment unit
-		mfu = self._mtu - MAC_DATA_HEADER_LEN
-		frame_cnt = len(packet) // mfu + int(len(packet) % mfu != 0)
-
+		mfu = self._mtu - MAC_HEADER_LEN
+		frame_cnt = (len(packet) + mfu - 1) // mfu
 		print('frame_cnt is', frame_cnt)
 
+		frame_id_list = list(self._gen_frame_id(frame_cnt + 1))
+		print('frame_id_list', frame_id_list)
+
+		# START
 		print('sending start')
-		start_payload = np.concatenate((
-			MAC_FRAME_TYPE.CTRL_START,
-			packet_id, packet_length,
-			packet_id, packet_length,
-			np.array([frame_cnt], dtype=np.uint8)
-		))
-		print('payload', start_payload)
-		self._stop_and_wait(start_payload)
+		self._stop_and_wait(dst, MACTYPE.START, frame_id_list[0], np.array([frame_cnt], dtype=np.uint8))
 		print('sent start')
 
-		for i in range(frame_cnt):
-			fragment = packet[i*mfu:(i+1)*mfu]
-			payload = np.concatenate((MAC_FRAME_TYPE.DATA, np.array([i], dtype=np.uint8), fragment))
-			print('sending frame {}'.format(i))
-			self._stop_and_wait(payload)
-			print('sent frame {}'.format(i))
+		for i, frame_id in enumerate(frame_id_list[1:]):
+			fragment = packet[i * mfu : (i + 1) * mfu]
+			print('sending frame {}'.format(frame_id))
+			self._stop_and_wait(dst, MACTYPE.DATA, frame_id, fragment)
+			print('sent frame {}'.format(frame_id))
 
-		print('sending end')
-		self._stop_and_wait(np.concatenate((MAC_FRAME_TYPE.CTRL_END, packet_id)))
-		print('sent end')
-
-	@classmethod
-	def _extract_start(klass, data):
-		print('received canary', data[1:9])
-		data = np.concatenate((data[:1], data[9:]))
-		if not klass._is_start(data):
-			return (None, None, None)
-		return convb2i(data[1:5]), convb2i(data[5:9]), data[9]
-
-	@classmethod
-	def _extract_data(klass, data):
-		if not klass._is_data(data):
-			return (None, None)
-		return data[1], data[2:]
-
-	@classmethod
-	def _extract_end(klass, data):
-		if not klass._is_end(data):
-			return None
-		return convb2i(data[1:])
-
-	@classmethod
-	def _extract_ack(klass, data):
-		print(data, data.size)
-		if not klass._is_ack(data):
-			return False
-		return True
-
-	@classmethod
-	def _is_ack(klass, data):
-		return data.size == 2 and data[0] == MAC_FRAME_TYPE.ACK[0]
-
-	@classmethod
-	def _is_data(klass, data):
-		return data.size >= 2 and data[0] == MAC_FRAME_TYPE.DATA[0]
-
-	@classmethod
-	def _is_start(klass, data):
-		return data.size == 10 and data[0] == MAC_FRAME_TYPE.CTRL_START[0]
-
-	@classmethod
-	def _is_end(klass, data):
-		return data.size == 5 and data[0] == MAC_FRAME_TYPE.CTRL_END[0]
-
-	@classmethod
-	def _is_valid(klass, data):
-		return klass._is_data(data) or klass._is_ack(data) or klass._is_start(data) or klass._is_end(data)
-
-	def recv(self):
-
-		packet_id = None
-		while packet_id is None:
-			print('waiting start')
-			start_pack = self._rx.recv()
-			print(start_pack)
-			packet_id, packet_length, frame_cnt = self._extract_start(start_pack)
-		self._tx.send(np.concatenate((MAC_FRAME_TYPE.ACK, np.array([254], dtype=np.uint8))))
-		print('received start')
-
-		start_time = datetime.now()
-
-		packet = {}
-
-		print('frame_cnt is', frame_cnt)
-
-		frame_id = 0
-		while True:
-			print('waiting data', i)
-			received_frame = self._rx.recv()
-			if self._is_end(received_frame):
-				break
-			if self._is_start(received_frame):
-				self._tx.send(np.concatenate((MAC_FRAME_TYPE.ACK, np.array([254], dtype=np.uint8))))
-				print('Sent start ack again')
-			elif self._is_data(received_frame):
-				frame_id, data = self._extract_data(received_frame)
-				self._tx.send(np.concatenate((MAC_FRAME_TYPE.ACK, np.array([frame_id], dtype=np.uint8))))
-				packet[frame_id] = data
-				print('received data', frame_id)
-
-		# print('waiting end')
-		packet_id_again = self._extract_end(received_frame)
-		self._tx.send(np.concatenate((MAC_FRAME_TYPE.ACK, np.array([255], dtype=np.uint8))))
-		if packet_id != packet_id_again:
-			raise ValueError('Packet ID not match')
-		print('received end')
-
-
-		end_time = datetime.now()
-
-		print(end_time - start_time)
-		
-		return np.concatenate([packet[i] for i in sorted(packet.keys())])
+	def recv(self, timeout=None):
+		return self._net_queue.get(timeout=timeout)
