@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 19:07:52
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 05:47:08
+# @Last Modified time: 2018-11-18 18:26:17
 
 
 from mac import MAC
@@ -26,13 +26,13 @@ parser.add_argument('-t', '--send-device', type=int_or_str,
 args = parser.parse_args()
 
 if __name__ == '__main__':
-	mac = MAC(rx_device=args.recv_device, tx_device=args.send_device,
+	mac = MAC(addr=0xee, rx_device=args.recv_device, tx_device=args.send_device,
 			  ack_timeout=0.5, max_retries=20, mtu=100)
 	mac.start()
 
 	with open('INPUT.bin', 'rb') as f:
 		raw_data = f.read()
-	mac.send(np.frombuffer(raw_data, dtype=np.uint8))
+	mac.send(0x77, np.frombuffer(raw_data, dtype=np.uint8))
 
 	packet = mac.recv()
 	with open('OUTPUT2to1.bin', 'wb') as f:

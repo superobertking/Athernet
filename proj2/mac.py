@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 18:18:40
+# @Last Modified time: 2018-11-18 18:40:31
 
 
 from sender import Sender
@@ -149,7 +149,7 @@ class MAC(object):
 				pass
 
 	def ping(self, dst):
-		frame_id = self._gen_frame_id()
+		frame_id = self._gen_frame_id()[0]
 		self._send_ping(dst, frame_id)
 
 	def _stop_and_wait(self, dst, mac_type, frame_id, payload):
@@ -162,7 +162,9 @@ class MAC(object):
 			try:
 				print('trial {} receiving'.format(retry))
 				src, ack_frame_id = self._ack_queue.get(timeout=self._ack_timeout)
-				assert ack_frame_id == frame_id
+				if ack_frame_id != frame_id:
+					print(ack_frame_id, frame_id)
+					assert False
 				print('trial {} received'.format(retry))
 				break
 			except queue.Empty:
@@ -185,6 +187,9 @@ class MAC(object):
 
 	def _send_pong(self, dst, frame_id):
 		self._send_frame(dst, MACTYPE.PONG, frame_id)
+
+	def pert(self, dst):
+		pass
 
 	def send(self, dst, packet):
 		packet_length = convi2b(len(packet), 4)
