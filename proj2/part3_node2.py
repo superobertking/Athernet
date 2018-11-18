@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 18:58:36
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 18:26:27
+# @Last Modified time: 2018-11-18 21:18:30
 
 
 from mac import MAC
@@ -27,7 +27,7 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
 	mac = MAC(addr=0x77, rx_device=args.recv_device, tx_device=args.send_device,
-			  ack_timeout=0.5, max_retries=20, mtu=100)
+			  ack_timeout=0.5, max_retries=20, mtu=128)
 	mac.start()
 
 	with open('INPUT.bin', 'rb') as f:

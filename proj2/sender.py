@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 18:20:19
+# @Last Modified time: 2018-11-18 21:20:50
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -10,6 +10,7 @@ from constants import LUT_MOD, PREAMBLE, SAMPLERATE
 import sounddevice as sd
 import numpy as np
 import queue
+from datetime import datetime
 import threading
 import binascii
 from auxiliaries import *
@@ -17,6 +18,8 @@ import reedsolo
 
 rs_codec = reedsolo.RSCodec(4)
 
+
+sd.default.latency = ('low', 'low')
 
 class Sender(object):
 	"""Sender class for physical layer"""
@@ -79,7 +82,9 @@ class Sender(object):
 			if not self._running.is_set():
 				print('shuting down sender')
 				break
+			# print('timing: start sending at', datetime.now())
 			sd.play(payload, blocking=True, samplerate=SAMPLERATE, **self._kwargs)
+			# print('timing: end sending at', datetime.now())
 			if sent:
 				sent.set()
 
@@ -119,13 +124,16 @@ class Sender(object):
 
 	@classmethod
 	def _payload2signal(klass, payload):
+		payload = payload.astype(np.uint8)
+		# payload_header = np.array([(len(payload) >> 8) & 0xff, len(payload) & 0xff], dtype=np.uint8)
 		payload_header = np.frombuffer(rs_codec.encode(bytes([(len(payload) >> 8) & 0xff, len(payload) & 0xff])), dtype=np.uint8)
+		# crc = np.array([], dtype=np.uint8)
 		crc = convi2b(binascii.crc32(bytes(payload)) & 0xffffffff, 4)
-		# data = np.concatenate((payload, crc))
 		data = np.concatenate((payload_header, payload, crc))
 		# print(data)
 		modulated_data = np.concatenate([klass._modulate(klass._encode(b)) for b in data])
 		modulated_data = np.concatenate((PREAMBLE, modulated_data))
+		print('after modulation:', len(payload), len(modulated_data))
 		return np.array(modulated_data, dtype=np.float32)
 
 	@staticmethod

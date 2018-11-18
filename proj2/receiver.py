@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:42:10
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 05:38:28
+# @Last Modified time: 2018-11-18 21:20:33
 
 
 from constants import *
@@ -16,6 +16,9 @@ from datetime import datetime
 import reedsolo
 import binascii
 from auxiliaries import *
+
+
+sd.default.latency = ('low', 'low')
 
 
 rs_codec = reedsolo.RSCodec(4)
@@ -80,8 +83,10 @@ class Receiver(object):
 
 		self._sig_buffer = self._sig_buffer[cursor_align:]
 
+		# print('timing: frame detected at', datetime.now())
+
 	def _extract_payload(self):
-		start_time = datetime.now()
+		# start_time = datetime.now()
 		BIAS_SELECTIONS = list(range(-1, 2))
 
 		cursor = 0
@@ -130,6 +135,8 @@ class Receiver(object):
 		try:
 			raw_payload_length = [_extract_byte() for _ in range(6)]
 			payload_length = rs_codec.decode(bytes(raw_payload_length))
+			# raw_payload_length = [_extract_byte() for _ in range(2)]
+			# payload_length = raw_payload_length
 		except reedsolo.ReedSolomonError:
 			print('Cannot recover payload_length')
 			self._sig_buffer = self._sig_buffer[cursor:]
@@ -140,17 +147,19 @@ class Receiver(object):
 		payload = [_extract_byte() for _ in range(payload_length)]
 
 		crc = binascii.crc32(bytes(payload)) & 0xffffffff
+		# raw_crc = crc
 		raw_crc = convb2i(_extract_byte() for _ in range(4))
 
 		if crc != raw_crc:
-			print('Wrong CRC detected {:08x} {:08x}'.format(crc, raw_crc))
 			self._sig_buffer = self._sig_buffer[cursor:]
 			return np.array([], dtype=np.uint8)
 
 		self._sig_buffer = self._sig_buffer[cursor:]
 
-		end_time = datetime.now()
-		print(end_time - start_time)
+		# end_time = datetime.now()
+		# print(end_time - start_time)
+
+		# print('timing: frame received at', end_time)
 
 		return np.array(payload, dtype=np.uint8)
 

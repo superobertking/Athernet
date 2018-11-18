@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 18:40:31
+# @Last Modified time: 2018-11-18 21:40:54
 
 
 from sender import Sender
@@ -120,7 +120,7 @@ class MAC(object):
 			print('in _work, get frame_id', frame_id)
 			if self._is_type(frame, MACTYPE.DATA):
 				print('in _work, get data frame_id', frame_id)
-				self._send_ack(src, frame_id)
+				self._send_ack(src, frame_id, wait=False)
 				if state != STATE.GET_DATA:
 					continue
 				if frame_id != last_frame_id + 1:
@@ -132,7 +132,7 @@ class MAC(object):
 					state = STATE.GET_START
 			elif self._is_type(frame, MACTYPE.START):
 				print('in _work, get start frame_id', frame_id)
-				self._send_ack(src, frame_id)
+				self._send_ack(src, frame_id, wait=False)
 				if state != STATE.GET_START:
 					continue
 				frame_cnt = convb2i(payload)
@@ -142,15 +142,14 @@ class MAC(object):
 			elif self._is_type(frame, MACTYPE.ACK):
 				self._ack_queue.put((src, frame_id))
 			elif self._is_type(frame, MACTYPE.PING):
-				self._send_pong(src, frame_id)
+				# print('timing: received PING at', datetime.now())
+				self._send_pong(src, frame_id, wait=False)
 			elif self._is_type(frame, MACTYPE.PONG):
-				self._pong_queue.put(frame_id)
+				# print('timing: received PONG at', datetime.now())
+				self._pong_queue.put((src, frame_id))
 			else:
 				pass
-
-	def ping(self, dst):
-		frame_id = self._gen_frame_id()[0]
-		self._send_ping(dst, frame_id)
+		print('_work exited')
 
 	def _stop_and_wait(self, dst, mac_type, frame_id, payload):
 		retry = 0
@@ -161,10 +160,10 @@ class MAC(object):
 			print('trial {} sent'.format(retry))
 			try:
 				print('trial {} receiving'.format(retry))
-				src, ack_frame_id = self._ack_queue.get(timeout=self._ack_timeout)
-				if ack_frame_id != frame_id:
-					print(ack_frame_id, frame_id)
-					assert False
+				while True:
+					src, ack_frame_id = self._ack_queue.get(timeout=self._ack_timeout)
+					if ack_frame_id == frame_id:
+						break
 				print('trial {} received'.format(retry))
 				break
 			except queue.Empty:
@@ -173,23 +172,41 @@ class MAC(object):
 		else:
 			raise ValueError('Link Error: Transmit failed after {} retials'.format(self._max_retries))
 
-	def _send_frame(self, dst, mac_type, frame_id, payload=np.array([], dtype=np.uint8)):
-		self._tx.send(np.concatenate((
+	def _send_frame(self, dst, mac_type, frame_id, payload=np.array([], dtype=np.uint8), wait=True):
+		return self._tx.send(np.concatenate((
 			np.array([dst, self._addr, mac_type], dtype=np.uint8),
 			convi2b(frame_id, 2), payload
-		)))
+		)), wait=wait)
 
-	def _send_ack(self, dst, frame_id):
-		self._send_frame(dst, MACTYPE.ACK, frame_id)
+	def _send_ack(self, dst, frame_id, wait=True):
+		return self._send_frame(dst, MACTYPE.ACK, frame_id, wait=wait)
 
-	def _send_ping(self, dst, frame_id):
-		self._send_frame(dst, MACTYPE.PING, frame_id)
+	def _send_ping(self, dst, frame_id, wait=True):
+		return self._send_frame(dst, MACTYPE.PING, frame_id, wait=wait)
 
-	def _send_pong(self, dst, frame_id):
-		self._send_frame(dst, MACTYPE.PONG, frame_id)
+	def _send_pong(self, dst, frame_id, wait=True):
+		return self._send_frame(dst, MACTYPE.PONG, frame_id, wait=wait)
 
-	def pert(self, dst):
-		pass
+	def ping(self, dst, timeout=1):
+		frame_id = self._gen_frame_id()[0]		
+		start_time = datetime.now()
+		self._send_ping(dst, frame_id)
+		while True:
+			src, pong_frame_id = self._pong_queue.get(timeout=timeout)
+			if frame_id == pong_frame_id:
+				break
+		end_time = datetime.now()
+		return end_time - start_time
+
+	def perf(self, dst):
+		frame_id = self._gen_frame_id()[0]
+		mfu = self._mtu - MAC_HEADER_LEN
+		payload = np.random.random_integers(0, 255, size=mfu)
+		start_time = datetime.now()
+		self._stop_and_wait(dst, MACTYPE.DATA, frame_id, payload)
+		end_time = datetime.now()
+		timediff = end_time - start_time
+		return mfu, timediff
 
 	def send(self, dst, packet):
 		packet_length = convi2b(len(packet), 4)

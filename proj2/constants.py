@@ -68,3 +68,4 @@ NUM_TRANS_45 = NUM_TRANS // 4 * 5
 # import matplotlib.pyplot as plt
 # plt.plot(header_time,HEADER)
 # plt.show()
+sd.default.latency = ('low', 'low')
