@@ -2,12 +2,13 @@
 # @Author: robertking
 # @Date:   2018-11-17 19:07:52
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 21:18:31
+# @Last Modified time: 2018-11-21 12:43:56
 
 
 from mac import MAC
 
 import argparse
+import time
 import numpy as np
 
 
@@ -27,7 +28,7 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
 	mac = MAC(addr=0xee, rx_device=args.recv_device, tx_device=args.send_device,
-			  ack_timeout=0.5, max_retries=20, mtu=128)
+			  ack_timeout=1, max_retries=100, mtu=100)
 	mac.start()
 
 	with open('INPUT.bin', 'rb') as f:
@@ -37,5 +38,7 @@ if __name__ == '__main__':
 	packet = mac.recv()
 	with open('OUTPUT2to1.bin', 'wb') as f:
 		f.write(packet.tobytes())
+
+	time.sleep(1)
 
 	mac.shutdown()

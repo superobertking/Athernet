@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 21:20:50
+# @Last Modified time: 2018-11-21 12:40:24
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -27,11 +27,12 @@ class Sender(object):
 		super(Sender, self).__init__()
 		self._kwargs = kwargs
 		print(kwargs)
-		self._sending_queue = queue.Queue()
+		self._sending_queue = queue.PriorityQueue()
 		self._daemon_thread = threading.Thread(target=self._task, daemon=True)
 		self._running = threading.Event()
 		self._should_stop = threading.Event()
 		self._play_buffer = np.array([], dtype=np.float32)
+		self._items_sent = 0
 
 	def _callback(self, outdata, frames, time, status):
 		if status:
@@ -76,7 +77,7 @@ class Sender(object):
 		# 			sent.set()
 
 		while True:
-			payload, sent = self._sending_queue.get()
+			priority, payload, sent = self._sending_queue.get()
 			if payload is not None:
 				print('get payload len', len(payload))
 			if not self._running.is_set():
@@ -98,10 +99,10 @@ class Sender(object):
 	def shutdown(self):
 		self._running.clear()
 		self._should_stop.set()
-		self._sending_queue.put((None, None))
+		self._sending_queue.put((None, None, None))
 		self._daemon_thread.join()
 
-	def send(self, payload, wait=True):
+	def send(self, payload, wait=True, priority=255):
 		"""\
 		payload: np array of uint8
 		"""
@@ -109,8 +110,10 @@ class Sender(object):
 		if len(payload) >= 2 ** 16:
 			raise ValueError('Payload length overflow')
 
+		priority = (priority, self._get_seq_priority())
+
 		sent = threading.Event()
-		self._sending_queue.put((self._payload2signal(payload), sent))
+		self._sending_queue.put((priority, self._payload2signal(payload), sent))
 		if wait:
 			sent.wait()
 		else:
@@ -121,6 +124,10 @@ class Sender(object):
 			raise ValueError('Payload length overflow')
 
 		sd.play(self._payload2signal(payload), blocking=True, samplerate=SAMPLERATE, **self._kwargs)
+
+	def _get_seq_priority(self):
+		self._items_sent += 1
+		return self._items_sent
 
 	@classmethod
 	def _payload2signal(klass, payload):
