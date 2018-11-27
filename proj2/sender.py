@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-21 12:40:24
+# @Last Modified time: 2018-11-28 00:52:03
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -39,9 +39,9 @@ class Sender(object):
 			print("Error occurs %r" % status)
 		while self._play_buffer.size < frames:
 			try:
-				payload, sent = self._sending_queue.get_nowait()
+				priority, payload, sent = self._sending_queue.get_nowait()
 				if payload is not None:
-					self._play_buffer = np.concatenate((self._play_buffer, payload))
+					self._play_buffer = np.concatenate((self._play_buffer, payload, ))
 				if sent:
 					sent.set()
 			except queue.Empty:
@@ -60,10 +60,11 @@ class Sender(object):
 
 	def _task(self):
 		print('sender task started')
-		# with sd.OutputStream(samplerate=SAMPLERATE, channels=1, dtype=np.float32,
-		# 					blocksize=512,
-		#             		callback=self._callback, **self._kwargs):
-		# 	self._should_stop.wait()
+
+		with sd.OutputStream(samplerate=SAMPLERATE, channels=1, dtype=np.float32,
+							blocksize=128,
+		            		callback=self._callback, **self._kwargs):
+			self._should_stop.wait()
 
 		# with sd.OutputStream(samplerate=SAMPLERATE, channels=1, dtype=np.float32, **self._kwargs) as stream:
 		# 	while True:
@@ -76,18 +77,18 @@ class Sender(object):
 		# 		if sent:
 		# 			sent.set()
 
-		while True:
-			priority, payload, sent = self._sending_queue.get()
-			if payload is not None:
-				print('get payload len', len(payload))
-			if not self._running.is_set():
-				print('shuting down sender')
-				break
-			# print('timing: start sending at', datetime.now())
-			sd.play(payload, blocking=True, samplerate=SAMPLERATE, **self._kwargs)
-			# print('timing: end sending at', datetime.now())
-			if sent:
-				sent.set()
+		# while True:
+		# 	priority, payload, sent = self._sending_queue.get()
+		# 	if payload is not None:
+		# 		print('get payload len', len(payload))
+		# 	if not self._running.is_set():
+		# 		print('shuting down sender')
+		# 		break
+		# 	# print('timing: start sending at', datetime.now())
+		# 	sd.play(payload, blocking=True, samplerate=SAMPLERATE, **self._kwargs)
+		# 	# print('timing: end sending at', datetime.now())
+		# 	if sent:
+		# 		sent.set()
 
 
 	def start(self):
@@ -99,7 +100,7 @@ class Sender(object):
 	def shutdown(self):
 		self._running.clear()
 		self._should_stop.set()
-		self._sending_queue.put((None, None, None))
+		self._sending_queue.put(((-256, 0), None, None))
 		self._daemon_thread.join()
 
 	def send(self, payload, wait=True, priority=255):
@@ -139,8 +140,8 @@ class Sender(object):
 		data = np.concatenate((payload_header, payload, crc))
 		# print(data)
 		modulated_data = np.concatenate([klass._modulate(klass._encode(b)) for b in data])
-		modulated_data = np.concatenate((PREAMBLE, modulated_data))
-		print('after modulation:', len(payload), len(modulated_data))
+		modulated_data = np.concatenate((PREAMBLE, modulated_data, np.zeros(8)))
+		# print('after modulation:', len(payload), len(modulated_data))
 		return np.array(modulated_data, dtype=np.float32)
 
 	@staticmethod

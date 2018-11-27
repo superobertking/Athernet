@@ -2,13 +2,14 @@
 # @Author: robertking
 # @Date:   2018-11-17 18:58:36
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-21 12:43:51
+# @Last Modified time: 2018-11-28 00:51:27
 
 
 from mac import MAC
 
 import argparse
 import time
+from datetime import datetime
 import numpy as np
 
 
@@ -27,18 +28,25 @@ parser.add_argument('-t', '--send-device', type=int_or_str,
 args = parser.parse_args()
 
 if __name__ == '__main__':
-	mac = MAC(addr=0x77, rx_device=args.recv_device, tx_device=args.send_device,
-			  ack_timeout=1, max_retries=100, mtu=100)
-	mac.start()
+	with MAC(addr=0x77, rx_device=args.recv_device, tx_device=args.send_device,
+			  ack_timeout=1, max_retries=100, mtu=50) as mac:
 
-	with open('INPUT.bin', 'rb') as f:
-		raw_data = f.read()
-	mac.send(0xee, np.frombuffer(raw_data, dtype=np.uint8))
+		start_time = datetime.now()
 
-	packet = mac.recv()
-	with open('OUTPUT1to2.bin', 'wb') as f:
-		f.write(packet.tobytes())
+		with open('INPUT.bin', 'rb') as f:
+			raw_data = f.read()
+		mac.send(0xee, np.frombuffer(raw_data, dtype=np.uint8))
 
-	time.sleep(1)
+		packet = mac.recv()
+		with open('OUTPUT1to2.bin', 'wb') as f:
+			f.write(packet.tobytes())
 
-	mac.shutdown()
+		end_time = datetime.now()
+
+		try:
+			time.sleep(1000)
+		except KeyboardInterrupt:
+			pass
+
+		print('Time consumed:', end_time - start_time)
+

@@ -11,8 +11,15 @@ import numpy as np
 
 import soundfile as sf
 import sounddevice as sd
-
+import sys
 
 data, fs = sf.read('Jamming.wav', dtype=np.float32)
 
-sd.play(data, fs, blocking=True, device=(1, 2))
+devices = (1, 2)
+if len(sys.argv) == 2:
+    devices = int(sys.argv[1])
+elif len(sys.argv) > 2:
+    devices = tuple(int(x) for x in sys.argv[1:])
+print(devices)
+
+sd.play(data, fs, blocking=True, device=devices)

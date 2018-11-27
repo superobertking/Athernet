@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-27 22:55:52
+# @Last Modified time: 2018-11-28 01:02:00
 
 
 from sender import Sender
@@ -124,8 +124,8 @@ class MAC(object):
 			print('in _work, get frame_id', frame_id)
 			if self._is_type(frame, MACTYPE.DATA):
 				print('in _work, get data frame_id', frame_id)
-				self._send_ack(src, frame_id, wait=False, priority=-2)
-				# self._send_ack(src, frame_id, wait=False, priority=-1)
+				for _ in range(6):
+					self._send_ack(src, frame_id, wait=False, priority=-2)
 				if state != STATE.GET_DATA:
 					continue
 				if frame_id in frame_id_map:
@@ -138,8 +138,8 @@ class MAC(object):
 					state = STATE.GET_START
 			elif self._is_type(frame, MACTYPE.START):
 				print('in _work, get start frame_id', frame_id)
-				self._send_ack(src, frame_id, wait=False, priority=-1)
-				# self._send_ack(src, frame_id, wait=False, priority=-1)
+				for _ in range(6):
+					self._send_ack(src, frame_id, wait=False, priority=-2)
 				if state != STATE.GET_START:
 					continue
 				frame_cnt = convb2i(payload)
@@ -148,7 +148,7 @@ class MAC(object):
 				state = STATE.GET_DATA
 				frame_id_map = {}
 			elif self._is_type(frame, MACTYPE.ACK):
-				print('============================')
+				print('in _work, get ack frame_id', frame_id)
 				self._ack_queue.put((src, frame_id))
 			elif self._is_type(frame, MACTYPE.PING):
 				# print('timing: received PING at', datetime.now())
@@ -232,7 +232,7 @@ class MAC(object):
 		self._stop_and_wait(dst, MACTYPE.START, frame_id_list[0], np.array([frame_cnt], dtype=np.uint8))
 		print('sent start')
 
-		window_size = 10
+		window_size = 200
 
 		ack_set = set()
 		retry = 0
@@ -251,7 +251,6 @@ class MAC(object):
 			if evt:
 				evt.wait()
 			time.sleep(self._ack_timeout)
-			print('acked: ', len(ack_set), ack_set)
 			while len(window_set) != window_end - window_start:
 				try:
 					src, ack_frame_id = self._ack_queue.get_nowait()
@@ -261,6 +260,7 @@ class MAC(object):
 				except queue.Empty:
 					print('WTF')
 					break
+			print('acked: ', len(ack_set), ack_set)
 			print(window_list, window_set)
 			if len(window_set) == len(window_list) and len(ack_set) != frame_cnt:
 				window_set = set()

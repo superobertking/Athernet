@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:42:10
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-18 21:20:33
+# @Last Modified time: 2018-11-28 00:53:16
 
 
 from constants import *
@@ -10,6 +10,7 @@ from constants import *
 import time
 import argparse
 import math
+import sys
 import threading
 import queue
 from datetime import datetime
@@ -45,7 +46,7 @@ class Receiver(object):
 			self._sig_buffer = np.concatenate((self._sig_buffer, self._sig_recv.get()))
 
 		cursor = PREAMBLE_SAMPLESIZE
-		print("read enough buffer, start sync")
+		# print("read enough buffer, start sync")
 
 		time_detach = 0
 		max_rate = 0
@@ -68,7 +69,7 @@ class Receiver(object):
 					if rate > max_rate:
 						max_rate = rate
 						cursor_align = i
-					print("big rate",rate)
+					# print("big rate",rate)
 				else:
 					if cursor_align is None:
 						continue
@@ -138,11 +139,11 @@ class Receiver(object):
 			# raw_payload_length = [_extract_byte() for _ in range(2)]
 			# payload_length = raw_payload_length
 		except reedsolo.ReedSolomonError:
-			print('Cannot recover payload_length')
+			print('Cannot recover payload_length', file=sys.stderr)
 			self._sig_buffer = self._sig_buffer[cursor:]
 			return np.array([], dtype=np.uint8)
 		payload_length = payload_length[0] << 8 | payload_length[1]
-		print('payload_length is', payload_length)
+		# print('payload_length is', payload_length)
 
 		payload = [_extract_byte() for _ in range(payload_length)]
 
@@ -187,6 +188,6 @@ class Receiver(object):
 
 	def _receive_signal(self, indata, frames, time, status):
 		if status:
-			print("Error occurs %r" % status)
+			print("Error occurs %r" % status, file=sys.stderr)
 		data_reshape = np.array(indata[:,0])
 		self._sig_recv.put(data_reshape)
