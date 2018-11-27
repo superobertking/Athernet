@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-28 01:02:00
+# @Last Modified time: 2018-11-28 01:37:34
 
 
 from sender import Sender
@@ -124,8 +124,8 @@ class MAC(object):
 			print('in _work, get frame_id', frame_id)
 			if self._is_type(frame, MACTYPE.DATA):
 				print('in _work, get data frame_id', frame_id)
-				for _ in range(6):
-					self._send_ack(src, frame_id, wait=False, priority=-2)
+				for _ in range(3):
+					self._send_ack(src, frame_id, wait=False, priority=0)
 				if state != STATE.GET_DATA:
 					continue
 				if frame_id in frame_id_map:
@@ -138,8 +138,8 @@ class MAC(object):
 					state = STATE.GET_START
 			elif self._is_type(frame, MACTYPE.START):
 				print('in _work, get start frame_id', frame_id)
-				for _ in range(6):
-					self._send_ack(src, frame_id, wait=False, priority=-2)
+				for _ in range(3):
+					self._send_ack(src, frame_id, wait=False, priority=0)
 				if state != STATE.GET_START:
 					continue
 				frame_cnt = convb2i(payload)

@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-28 00:52:03
+# @Last Modified time: 2018-11-28 01:44:24
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -13,6 +13,7 @@ import queue
 from datetime import datetime
 import threading
 import binascii
+import random
 from auxiliaries import *
 import reedsolo
 
@@ -27,30 +28,53 @@ class Sender(object):
 		super(Sender, self).__init__()
 		self._kwargs = kwargs
 		print(kwargs)
-		self._sending_queue = queue.PriorityQueue()
+		# self._sending_queue = queue.PriorityQueue()
+		self._control_queue = queue.Queue()
+		self._data_queue = queue.Queue()
 		self._daemon_thread = threading.Thread(target=self._task, daemon=True)
 		self._running = threading.Event()
 		self._should_stop = threading.Event()
 		self._play_buffer = np.array([], dtype=np.float32)
 		self._items_sent = 0
+		self._counter = 0
 
 	def _callback(self, outdata, frames, time, status):
 		if status:
 			print("Error occurs %r" % status)
 		while self._play_buffer.size < frames:
-			try:
-				priority, payload, sent = self._sending_queue.get_nowait()
-				if payload is not None:
-					self._play_buffer = np.concatenate((self._play_buffer, payload, ))
-				if sent:
-					sent.set()
-			except queue.Empty:
+			control_queue_empty = self._control_queue.empty()
+			data_queue_empty = self._data_queue.empty()
+			if control_queue_empty and not data_queue_empty:
+				priority, payload, sent = self._data_queue.get_nowait()
+			elif not control_queue_empty and data_queue_empty:
+				priority, payload, sent = self._control_queue.get_nowait()
+			elif not control_queue_empty and not data_queue_empty:
+				priority, payload, sent = self._data_queue.get_nowait() if self._counter & 3 == 0 else self._control_queue.get_nowait()
+				self._counter += 1
+			elif control_queue_empty and data_queue_empty:
 				# print('callback go empty')
 				outdata[:,0] = np.concatenate((self._play_buffer, np.zeros(frames - self._play_buffer.size, dtype=np.float32)))
 				self._play_buffer = np.array([], dtype=np.float32)
 				if self._should_stop.is_set():
 					raise sd.CallbackStop
 				return
+			if payload is not None:
+				self._play_buffer = np.concatenate((self._play_buffer, payload))
+			if sent:
+				sent.set()
+			# try:
+			# 	priority, payload, sent = self._sending_queue.get_nowait()
+			# 	if payload is not None:
+			# 		self._play_buffer = np.concatenate((self._play_buffer, payload))
+			# 	if sent:
+			# 		sent.set()
+			# except queue.Empty:
+			# 	# print('callback go empty')
+			# 	outdata[:,0] = np.concatenate((self._play_buffer, np.zeros(frames - self._play_buffer.size, dtype=np.float32)))
+			# 	self._play_buffer = np.array([], dtype=np.float32)
+			# 	if self._should_stop.is_set():
+			# 		raise sd.CallbackStop
+			# 	return
 		# print('callback go normoally')
 		outdata[:,0] = self._play_buffer[:frames]
 		self._play_buffer = self._play_buffer[frames:]
@@ -100,7 +124,7 @@ class Sender(object):
 	def shutdown(self):
 		self._running.clear()
 		self._should_stop.set()
-		self._sending_queue.put(((-256, 0), None, None))
+		# self._sending_queue.put(((-256, 0), None, None))
 		self._daemon_thread.join()
 
 	def send(self, payload, wait=True, priority=255):
@@ -111,10 +135,12 @@ class Sender(object):
 		if len(payload) >= 2 ** 16:
 			raise ValueError('Payload length overflow')
 
-		priority = (priority, self._get_seq_priority())
+		# priority = (priority, self._get_seq_priority())
 
 		sent = threading.Event()
-		self._sending_queue.put((priority, self._payload2signal(payload), sent))
+		# self._sending_queue.put((priority, self._payload2signal(payload), sent))
+		queue_to_put = self._data_queue if priority == 255 else self._control_queue
+		queue_to_put.put((priority, self._payload2signal(payload), sent))
 		if wait:
 			sent.wait()
 		else:
