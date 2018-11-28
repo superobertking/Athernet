@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-28 01:44:24
+# @Last Modified time: 2018-11-28 03:52:15
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -29,8 +29,8 @@ class Sender(object):
 		self._kwargs = kwargs
 		print(kwargs)
 		# self._sending_queue = queue.PriorityQueue()
-		self._control_queue = queue.Queue()
-		self._data_queue = queue.Queue()
+		self._ctrl_queue = queue.Queue()
+		self._data_queue = queue.Queue(maxsize=64)
 		self._daemon_thread = threading.Thread(target=self._task, daemon=True)
 		self._running = threading.Event()
 		self._should_stop = threading.Event()
@@ -42,16 +42,11 @@ class Sender(object):
 		if status:
 			print("Error occurs %r" % status)
 		while self._play_buffer.size < frames:
-			control_queue_empty = self._control_queue.empty()
-			data_queue_empty = self._data_queue.empty()
-			if control_queue_empty and not data_queue_empty:
+			if not self._ctrl_queue.empty():
+				priority, payload, sent = self._ctrl_queue.get_nowait()
+			elif not self._data_queue.empty():
 				priority, payload, sent = self._data_queue.get_nowait()
-			elif not control_queue_empty and data_queue_empty:
-				priority, payload, sent = self._control_queue.get_nowait()
-			elif not control_queue_empty and not data_queue_empty:
-				priority, payload, sent = self._data_queue.get_nowait() if self._counter & 3 == 0 else self._control_queue.get_nowait()
-				self._counter += 1
-			elif control_queue_empty and data_queue_empty:
+			else:
 				# print('callback go empty')
 				outdata[:,0] = np.concatenate((self._play_buffer, np.zeros(frames - self._play_buffer.size, dtype=np.float32)))
 				self._play_buffer = np.array([], dtype=np.float32)
@@ -139,7 +134,7 @@ class Sender(object):
 
 		sent = threading.Event()
 		# self._sending_queue.put((priority, self._payload2signal(payload), sent))
-		queue_to_put = self._data_queue if priority == 255 else self._control_queue
+		queue_to_put = self._data_queue if priority == 255 else self._ctrl_queue
 		queue_to_put.put((priority, self._payload2signal(payload), sent))
 		if wait:
 			sent.wait()

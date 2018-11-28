@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 18:58:36
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-28 00:51:27
+# @Last Modified time: 2018-11-28 03:58:23
 
 
 from mac import MAC
@@ -29,7 +29,7 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
 	with MAC(addr=0x77, rx_device=args.recv_device, tx_device=args.send_device,
-			  ack_timeout=1, max_retries=100, mtu=50) as mac:
+			  ack_timeout=1, max_retries=100, mtu=38) as mac:
 
 		start_time = datetime.now()
 

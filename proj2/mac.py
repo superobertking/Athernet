@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-28 01:37:34
+# @Last Modified time: 2018-11-28 04:19:27
 
 
 from sender import Sender
@@ -10,8 +10,10 @@ from receiver import Receiver
 import numpy as np
 import queue
 import time
+import lt
 from datetime import datetime
 from auxiliaries import *
+import io
 import threading
 
 MAC_HEADER_LEN = 5
@@ -106,10 +108,7 @@ class MAC(object):
 
 		state = STATE.GET_START
 
-		# last_frame_id = -1
-		frame_cnt = 0
-
-		frame_id_map = {}
+		decoder = None
 
 		while not self._stop_working.is_set():
 			try:
@@ -124,21 +123,18 @@ class MAC(object):
 			print('in _work, get frame_id', frame_id)
 			if self._is_type(frame, MACTYPE.DATA):
 				print('in _work, get data frame_id', frame_id)
-				for _ in range(3):
-					self._send_ack(src, frame_id, wait=False, priority=0)
 				if state != STATE.GET_DATA:
 					continue
-				if frame_id in frame_id_map:
-					continue
-				# last_frame_id = frame_id
-				# packet_buffer = np.concatenate((packet_buffer, payload))
-				frame_id_map[frame_id] = payload
-				if len(frame_id_map) == frame_cnt:
-					self._net_queue.put(np.concatenate([frame_id_map[i] for i in sorted(frame_id_map.keys())]))
+				decoder.consume_block(lt.decode.block_from_bytes(payload))
+				if decoder.is_done():
+					self._net_queue.put(np.frombuffer(decoder.bytes_dump(), dtype=np.uint8))
+					print(len(np.frombuffer(decoder.bytes_dump(), dtype=np.uint8)), self._net_queue.empty())
+					for _ in range(20):
+						self._send_ack(src, frame_id, wait=False, priority=0)
 					state = STATE.GET_START
 			elif self._is_type(frame, MACTYPE.START):
 				print('in _work, get start frame_id', frame_id)
-				for _ in range(3):
+				for _ in range(10):
 					self._send_ack(src, frame_id, wait=False, priority=0)
 				if state != STATE.GET_START:
 					continue
@@ -146,7 +142,7 @@ class MAC(object):
 				# last_frame_id = frame_id
 				# packet_buffer = np.array([], np.uint8)
 				state = STATE.GET_DATA
-				frame_id_map = {}
+				decoder = lt.decode.LtDecoder()
 			elif self._is_type(frame, MACTYPE.ACK):
 				print('in _work, get ack frame_id', frame_id)
 				self._ack_queue.put((src, frame_id))
@@ -165,6 +161,8 @@ class MAC(object):
 		while retry < self._max_retries:
 			retry += 1
 			print('trial {} start'.format(retry))
+			self._send_frame(dst, mac_type, frame_id, payload, wait=False)
+			self._send_frame(dst, mac_type, frame_id, payload, wait=False)
 			self._send_frame(dst, mac_type, frame_id, payload)
 			print('trial {} sent'.format(retry))
 			try:
@@ -232,46 +230,19 @@ class MAC(object):
 		self._stop_and_wait(dst, MACTYPE.START, frame_id_list[0], np.array([frame_cnt], dtype=np.uint8))
 		print('sent start')
 
-		window_size = 200
-
-		ack_set = set()
-		retry = 0
-		window_set = set()
-		window_list = frame_id_list[1:1 + window_size]
-		window_start, window_end = 1, 1 + len(window_list)
-		while retry < self._max_retries and len(ack_set) != frame_cnt:
-			retry += 1
-			evt = None
-			for i in range(window_start, window_end):
-				frame_id = frame_id_list[i]
-				if frame_id in ack_set:
-					continue
-				fragment = packet[i * mfu : (i + 1) * mfu]
-				evt = self._send_frame(dst, MACTYPE.DATA, frame_id, fragment, wait=False)
-			if evt:
-				evt.wait()
-			time.sleep(self._ack_timeout)
-			while len(window_set) != window_end - window_start:
-				try:
-					src, ack_frame_id = self._ack_queue.get_nowait()
-					if window_start <= ack_frame_id < window_end:
-						ack_set.add(ack_frame_id)
-						window_set.add(ack_frame_id)
-				except queue.Empty:
-					print('WTF')
+		for fragment in lt.encode.encoder(io.BytesIO(packet), mfu):
+			print('send queuing')
+			self._send_frame(dst, MACTYPE.DATA, 100, np.frombuffer(fragment, dtype=np.uint8), wait=False)
+			print('send queued')
+			try:
+				src, ack_frame_id = self._ack_queue.get_nowait()
+				# print('acked: ', ack_frame_id)
+				if ack_frame_id != frame_id_list[0]:
 					break
-			print('acked: ', len(ack_set), ack_set)
-			print(window_list, window_set)
-			if len(window_set) == len(window_list) and len(ack_set) != frame_cnt:
-				window_set = set()
-				window_list = frame_id_list[window_end:window_end + window_size]
-				window_start, window_end = window_end, window_end + len(window_list)
-
-		# for i, frame_id in enumerate(frame_id_list[1:]):
-		# 	fragment = packet[i * mfu : (i + 1) * mfu]
-		# 	print('sending frame {}'.format(frame_id))
-		# 	self._stop_and_wait(dst, MACTYPE.DATA, frame_id, fragment)
-		# 	print('sent frame {}'.format(frame_id))
+			except queue.Empty:
+				# print('WTF')
+				pass
+		print('============================ packet sent ==========================')
 
 	def recv(self, timeout=None):
 		return self._net_queue.get(timeout=timeout)
