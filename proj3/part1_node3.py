@@ -9,15 +9,14 @@ server_address = ('0.0.0.0', 10000)
 print('starting up on {} port {}'.format(*server_address))
 sock.bind(server_address)
 
-while True:
-    print('\nwaiting to receive message')
-    data, address = sock.recvfrom(4096)
+try:
+	while True:
+		print('\nwaiting to receive message')
+		data, address = sock.recvfrom(4096)
 
-    print('received {} bytes from {}'.format(
-        len(data), address))
-    print(data)
-
-    if data:
-        sent = sock.sendto(data, address)
-        print('sent {} bytes back to {}'.format(
-            sent, address))
+		print('received {} bytes from {}'.format(
+			len(data), address))
+		print(data)
+finally:
+	print('closing socket')
+	sock.close()

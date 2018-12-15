@@ -7,13 +7,6 @@ import numpy as np
 import ipaddress
 from ip import IP, IP_TYPE
 
-# ICMP structure
-# | payload |
-# payload structure
-# | type(1) | id(1) | payload |
-class ICMP_TYPE:
-	PING = 0
-	PONG = 3
 
 # UDP structure
 # | SRC port(2) | DEST port(2) | payload |
@@ -26,7 +19,7 @@ class Aocket(object):
 		self._icmp_queue = queue.Queue()
 		self._bind = {}
 		self._recv_thread = threading.Thread(target=self._recv_all, daemon=True)
-		self._stop_recv = threading.Event()
+		self._stop_working = threading.Event()
 		self._ping_tick = 0
 
 	def __enter__(self):
@@ -41,7 +34,7 @@ class Aocket(object):
 		self._recv_thread.start()
 
 	def shutdown(self):
-		self._stop_recv.set()
+		self._stop_working.set()
 		self._recv_thread.join()
 		self._ip.shutdown()
 
@@ -70,13 +63,8 @@ class Aocket(object):
 		return None
 
 	def send(self, typ, src, dst, payload, wait=True):
-		if typ==IP_TYPE.UDP:
-			src_ipaddr, src_port = src
-			dst_ipaddr, dst_port = dst
-			header = np.concatenate((convi2b(src_port),convi2b(dst_port)))
-			return self._ip.send(typ, src_ipaddr, dst_ipaddr, np.concatenate(header,payload), wait=wait)
-		else:
-			raise Exception("Unknown type %r" % typ)
+		src_ipaddr, dst_ipaddr, payload = self.encapsulate_payload(typ, src, dst, payload)
+		return self._ip.send(typ, src_ipaddr, dst_ipaddr, payload, wait=wait)
 
 	def _recv_all(self):
 		while not self._stop_working.is_set():
@@ -87,15 +75,26 @@ class Aocket(object):
 			if typ==IP_TYPE.ICMP:
 				self._icmp_queue.put((src_ipaddr, dst_ipaddr, data))
 			else:
-				src_port, dst_port, payload = extract_payload(data)
-				q = self._bind.setdefault(src_port, queue.Queue())
-				q.put((dst_ipaddr, dst_port, payload))
+				src_port, dst_port, payload = self.extract_payload(data)
+				# print('Aocket received packet from', src_ipaddr, src_port)
+				q = self._bind.setdefault(dst_port, queue.Queue())
+				q.put((src_ipaddr, src_port, payload))
 
 	# Return (dst_ipaddr, dst_port, payload)
 	def recv(self, port, timeout=None):
 		q = self._bind.setdefault(port, queue.Queue())
 		return q.get(block=True, timeout=timeout)
 
-	@static_method
+	@staticmethod
 	def extract_payload(payload):
 		return convb2i(payload[:2]), convb2i(payload[2:4]), payload[4:]
+
+	@staticmethod
+	def encapsulate_payload(typ, src, dst, payload):
+		if typ==IP_TYPE.UDP:
+			src_ipaddr, src_port = src
+			dst_ipaddr, dst_port = dst
+			header = np.concatenate((convi2b(src_port, 2), convi2b(dst_port, 2)))
+			return src_ipaddr, dst_ipaddr, np.concatenate((header, payload))
+		else:
+			raise Exception("Unknown type %r" % typ)

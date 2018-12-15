@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-12-14 22:57:10
+# @Last Modified time: 2018-12-16 05:19:10
 
 
 from sender import Sender
@@ -115,18 +115,19 @@ class MAC(object):
 		while not self._stop_working.is_set():
 			try:
 				frame = self._rx.recv(timeout=1)
+				print('frame length:', len(frame))
 				dst, src, mac_type, frame_id, payload = self._extract_frame(frame)
 			except queue.Empty:
 				dst = None
 			if self._stop_working.is_set():
 				break
-			if dst != self._addr:
+			if dst != self._addr and dst != 0xff:
 				continue
 			print('in _work, get frame_id', frame_id)
 			if self._is_type(frame, MACTYPE.DATA):
 				print('in _work, get data frame_id', frame_id)
-				for _ in range(6):
-					self._send_ack(src, frame_id, wait=False, priority=-2)
+				# for _ in range(6):
+				self._send_ack(src, frame_id, wait=False, priority=-2)
 				if state != STATE.GET_DATA:
 					continue
 				if frame_id in frame_id_map:
@@ -139,8 +140,8 @@ class MAC(object):
 					state = STATE.GET_START
 			elif self._is_type(frame, MACTYPE.START):
 				print('in _work, get start frame_id', frame_id)
-				for _ in range(6):
-					self._send_ack(src, frame_id, wait=False, priority=-2)
+				# for _ in range(6):
+				self._send_ack(src, frame_id, wait=False, priority=-2)
 				if state != STATE.GET_START:
 					continue
 				frame_cnt = convb2i(payload)
@@ -218,7 +219,7 @@ class MAC(object):
 		timediff = end_time - start_time
 		return mfu, timediff
 
-	def send(self, dst, packet):
+	def send(self, dst, packet, wait=True):
 		packet_length = convi2b(len(packet), 4)
 
 		# max fragment unit
@@ -247,7 +248,7 @@ class MAC(object):
 				frame_id = frame_id_list[i]
 				if frame_id in ack_set:
 					continue
-				fragment = packet[i * mfu : (i + 1) * mfu]
+				fragment = packet[(i-1) * mfu : i * mfu]
 				evt = self._send_frame(dst, MACTYPE.DATA, frame_id, fragment, wait=False)
 			if evt:
 				evt.wait()
@@ -255,7 +256,7 @@ class MAC(object):
 			while len(window_set) != window_end - window_start:
 				try:
 					src, ack_frame_id = self._ack_queue.get_nowait()
-					if window_start <= ack_frame_id < window_end:
+					if window_list[0] <= ack_frame_id <= window_list[-1]:
 						ack_set.add(ack_frame_id)
 						window_set.add(ack_frame_id)
 				except queue.Empty:

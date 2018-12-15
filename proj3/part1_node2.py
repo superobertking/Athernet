@@ -9,7 +9,7 @@ server_address = (sys.argv[1], 10000)
 message = b'This is the message.  It will be repeated.'
 
 REP_TIMES = 10
-sock.bind(('0.0.0.0', 10001))
+
 try:
 	for i in range(REP_TIMES):
 		# Send data

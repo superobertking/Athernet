@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:43:28
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-28 00:52:03
+# @Last Modified time: 2018-12-16 04:02:12
 
 
 from constants import LUT_MOD, PREAMBLE, SAMPLERATE
@@ -62,7 +62,7 @@ class Sender(object):
 		print('sender task started')
 
 		with sd.OutputStream(samplerate=SAMPLERATE, channels=1, dtype=np.float32,
-							blocksize=128,
+							blocksize=256,
 		            		callback=self._callback, **self._kwargs):
 			self._should_stop.wait()
 
