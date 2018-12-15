@@ -1,5 +1,6 @@
 from auxiliaries import *
 import numpy as np
+from mac import MAC
 from ipaddress import ipaddress
 
 
