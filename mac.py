@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-28 01:02:00
+# @Last Modified time: 2018-12-14 22:57:10
 
 
 from sender import Sender
@@ -31,7 +31,7 @@ for i, t in enumerate(TYPES):
 
 class MAC(object):
 	"""MAC class using physical link classes"""
-	def __init__(self, addr=1, mtu=1500, tx_device=None, rx_device=None, max_retries=5, ack_timeout=0.2):
+	def __init__(self, addr=1, mtu=1500, tx_device=None, rx_device=None, max_retries=5, ack_timeout=0.2, **kwargs):
 		super(MAC, self).__init__()
 		self._mtu = mtu
 		self._addr = addr
@@ -47,12 +47,13 @@ class MAC(object):
 		self._frame_tick = 0
 		self._work_thread = threading.Thread(target=self._work, daemon=True)
 		self._stop_working = threading.Event()
+		self._kwargs = kwargs
 
 	def __enter__(self):
 		self.start()
 		return self
 	
-	def __exit__(self, t,v,tb):
+	def __exit__(self, t, v, tb):
 		self.shutdown()
 
 	def start(self):
