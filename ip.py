@@ -4,10 +4,11 @@ from ipaddress import ipaddress
 
 
 # PROTOCOL(1B) SRC_ADDR(4B) DST_ADDR(4B)
-RESERVED = 0
-ICMP = 1
-TCP = 2
-UDP = 3
+class IP_TYPE:
+	RESERVED = 0
+	ICMP = 1
+	TCP = 2
+	UDP = 3
 
 
 class IP(object):

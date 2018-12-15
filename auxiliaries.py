@@ -7,12 +7,11 @@
 
 import numpy as np
 
-def convi2b(tx_cnt, bts):
-	return np.array([(tx_cnt >> (8*(bts-i-1))) & 0xff for i in range(bts)], dtype=np.uint8)
+def convi2b(x, bts):
+	return np.array([(x >> (8*(bts-i-1))) & 0xff for i in range(bts)], dtype=np.uint8)
 
 def convb2i(buf):
 	data = 0
 	for x in buf:
 		data = (data << 8) | x
 	return data
-
