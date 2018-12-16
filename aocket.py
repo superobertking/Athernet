@@ -1,11 +1,12 @@
 import queue
 import threading
-from datetime import datetime
+import time
 
 from auxiliaries import *
 import numpy as np
 import ipaddress
-from ip import IP, IP_TYPE
+from ip import IP, IP_TYPE, ICMP_TYPE
+from ipaddress import ip_address
 
 
 # UDP structure
@@ -44,23 +45,24 @@ class Aocket(object):
 
 	def ping(self, src, dst, content, timeout=4):
 		ping_id = self._gen_ping_id()
-		payload = np.concatenate((convi2b(ping_id),convi2b(ICMP_TYPE.PING),content))
+		payload = np.concatenate((convi2b(ICMP_TYPE.PING, 1), convi2b(ping_id, 1), content))
 		self._ip.send(IP_TYPE.ICMP, src, dst, payload, wait=True)
-		start_time = datetime.now()
+		start_time = time.time()
 		end_time = start_time
-		while end_time-start_time<timeout:
+		while end_time - start_time < timeout:
 			try:
 				src_ipaddr, dst_ipaddr, payload = self._icmp_queue.get(block=True, timeout=timeout)
 			except queue.Empty:
 				break
-			end_time = datetime.now()
+			end_time = time.time()
+			src_ipaddr, dst_ipaddr = ip_address(src_ipaddr).exploded, ip_address(dst_ipaddr).exploded
 			icmp_type, pong_id = payload[0], payload[1]
 			if icmp_type!=ICMP_TYPE.PONG: continue
-			if pong_id!=ping_id: continue
-			if src_ipaddr!=src: continue
-			if dst_ipaddr!=dst: continue
-			return end_time-start_time
-		return None
+			if pong_id != ping_id: continue
+			if src_ipaddr != dst: continue
+			if dst_ipaddr != src: continue
+			return True, end_time-start_time, payload[2:]
+		return False, end_time-start_time, None
 
 	def send(self, typ, src, dst, payload, wait=True):
 		src_ipaddr, dst_ipaddr, payload = self.encapsulate_payload(typ, src, dst, payload)
@@ -69,13 +71,22 @@ class Aocket(object):
 	def _recv_all(self):
 		while not self._stop_working.is_set():
 			try:
-				typ, src_ipaddr, dst_ipaddr, data = self._ip.recv(timeout=2)
+				typ, src_ipaddr, dst_ipaddr, payload = self._ip.recv(timeout=2)
 			except:
 				continue
 			if typ==IP_TYPE.ICMP:
-				self._icmp_queue.put((src_ipaddr, dst_ipaddr, data))
+				icmp_type, seq_id = payload[0], payload[1]
+				if icmp_type == ICMP_TYPE.PING: #and dst_ipaddr == self.getmyipaddr():
+					print(f'Aocket received PING')
+					payload[0] = ICMP_TYPE.PONG
+					self._ip.send(IP_TYPE.ICMP, dst_ipaddr, src_ipaddr, payload, wait=False)
+				elif icmp_type == ICMP_TYPE.PONG:
+					print(f'Aocket received PONG')
+					self._icmp_queue.put((src_ipaddr, dst_ipaddr, payload))
+				else:
+					print(f'ICMP Type {icmp_type} not supported!')
 			else:
-				src_port, dst_port, payload = self.extract_payload(data)
+				src_port, dst_port, payload = self.extract_payload(payload)
 				# print('Aocket received packet from', src_ipaddr, src_port)
 				q = self._bind.setdefault(dst_port, queue.Queue())
 				q.put((src_ipaddr, src_port, payload))
@@ -84,6 +95,9 @@ class Aocket(object):
 	def recv(self, port, timeout=None):
 		q = self._bind.setdefault(port, queue.Queue())
 		return q.get(block=True, timeout=timeout)
+
+	def getmyipaddr(self):
+		return '0.0.0.0'
 
 	@staticmethod
 	def extract_payload(payload):

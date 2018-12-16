@@ -26,8 +26,12 @@ if __name__ == '__main__':
 	with Aocket(addr=0x77, rx_device=args.recv_device, tx_device=args.send_device,
 				ack_timeout=0.2, max_retries=20, mtu=1500) as aocket:
 
-		with open('INPUT.txt', 'rb') as f:
-			ctt = f.readlines()
-
-		for l in ctt:
-			aocket.send(IP_TYPE.UDP, ('192.168.1.2', 16384), ('10.20.197.191', 10000), np.frombuffer(l, dtype=np.uint8))
+		# dst = '119.75.217.26'
+		dst = '10.19.72.1'
+		for i in range(1, 11):
+			succeed, duration, payload = aocket.ping('192.168.1.2', dst, np.frombuffer(b'hello, world\n\000\000\000', dtype=np.uint8))
+			if succeed:
+				print(f'Ping {dst} request sequence {i} received reply after {duration} with payload {payload.tobytes()}')
+			else:
+				print(f'Ping {dst} request sequence {i} timeout after {duration}')
+			time.sleep(1)

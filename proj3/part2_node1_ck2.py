@@ -25,7 +25,7 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
 	with Aocket(addr=0x77, rx_device=args.recv_device, tx_device=args.send_device,
-				ack_timeout=0.2, max_retries=100, mtu=1500) as aocket:
+				ack_timeout=0.2, max_retries=20, mtu=1500) as aocket:
 
 		while True:
 			src_ipaddr, src_port, payload = aocket.recv(16384)

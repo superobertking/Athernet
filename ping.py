@@ -136,7 +136,8 @@ def receive_one_ping(my_socket, ID, timeout):
         # You'll see your own request
         if type != 8 and packetID == ID:
             bytesInDouble = struct.calcsize("d")
-            timeSent = struct.unpack("d", recPacket[28:28 + bytesInDouble])[0]
+            # timeSent = struct.unpack("d", recPacket[28:28 + bytesInDouble])[0]
+            timeSent = 0
             return timeReceived - timeSent
 
         timeLeft = timeLeft - howLongInSelect
@@ -156,8 +157,9 @@ def send_one_ping(my_socket, dest_addr, ID):
     # Make a dummy heder with a 0 checksum.
     header = struct.pack("bbHHh", ICMP_ECHO_REQUEST, 0, my_checksum, ID, 1)
     bytesInDouble = struct.calcsize("d")
-    data = (192 - bytesInDouble) * b"Q"
-    data = struct.pack("d", default_timer()) + data
+    # data = (192 - bytesInDouble) * b"Q"
+    data = b''
+    # data = struct.pack("d", default_timer()) + data
 
     # Calculate the checksum on the data and the dummy header.
     my_checksum = checksum(header + data)
@@ -220,11 +222,11 @@ def verbose_ping(dest_addr, timeout = 2, count = 10):
 
 
 if __name__ == '__main__':
-    verbose_ping("heise.de")
-    verbose_ping("oc.robertking.cn")
+    # verbose_ping("heise.de")
+    # verbose_ping("oc.robertking.cn")
     verbose_ping("robertking.cn")
-    verbose_ping("10.19.72.1")
-    verbose_ping("127.0.0.1")
+    # verbose_ping("10.19.72.1")
+    # verbose_ping("127.0.0.1")
     # verbose_ping("google.com")
     # verbose_ping("a-test-url-taht-is-not-available.com")
     # verbose_ping("192.168.1.1")

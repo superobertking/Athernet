@@ -1,4 +1,4 @@
-from gateway import Gateway
+from aocket import Aocket
 from ip import IP_TYPE, ICMP_TYPE
 
 import argparse
@@ -23,9 +23,6 @@ args = parser.parse_args()
 
 
 if __name__ == '__main__':
-	with Gateway(addr=0xee, rx_device=args.recv_device, tx_device=args.send_device,
-				ack_timeout=0.1, max_retries=20, mtu=1500) as aocket:
-		try:
-			time.sleep(10000)
-		except KeyboardInterrupt:
-			pass
+	with Aocket(addr=0x77, rx_device=args.recv_device, tx_device=args.send_device,
+				ack_timeout=0.2, max_retries=20, mtu=1500) as aocket:
+		time.sleep(10000)
