@@ -64,6 +64,7 @@ class Aocket(object):
 			return True, end_time-start_time, payload[2:]
 		return False, end_time-start_time, None
 
+
 	def send(self, typ, src, dst, payload, wait=True):
 		src_ipaddr, dst_ipaddr, payload = self.encapsulate_payload(typ, src, dst, payload)
 		return self._ip.send(typ, src_ipaddr, dst_ipaddr, payload, wait=wait)

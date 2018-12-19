@@ -24,6 +24,7 @@ class Gateway(object):
 		self._nat_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self._icmp_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
 		# self._icmp_sock.setsockopt(socket.SOL_IP, socket.IP_TTL, 1)
+		# self._icmp_sock.setsockopt(socket.SOL_IP, socket.IP_HDRINCL, 1)
 		# fcntl.fcntl(self._icmp_sock, fcntl.F_SETFL, os.O_NONBLOCK)
 		self._acoustic_work_thread = threading.Thread(target=self._acoustic_work, daemon=True)
 		self._nat_work_thread = threading.Thread(target=self._nat_work, daemon=True)
@@ -92,37 +93,41 @@ class Gateway(object):
 				time.sleep(1)
 				continue
 
-			icmp_type, _, _, packetID, seq_id = struct.unpack("bbHHh", recPacket[20:28])
-			print(f'Gateway received std ICMP packet from {src} with icmp_type {icmp_type} and seq_id {seq_id}')
+			icmp_type, code, _, packetID, seq_id = struct.unpack("!bbHHh", recPacket[20:28])
+			# seq_id >>= 8
+			print(f'Gateway received std ICMP packet from {src} with icmp_type {icmp_type} code {code} and seq_id {seq_id}')
+			print(f"packetID: {packetID} ; self._icmp_id: {self._icmp_id} ; recP[40]={recPacket[40]}")
 
 			# Filters out the echo request itself. 
 			# This can be tested by pinging 127.0.0.1 
 			# You'll see your own request
-			if icmp_type == 8 and packetID != self._icmp_id:
+			if icmp_type == ICMP_ECHO_REQUEST and code==0 and packetID!=self._icmp_id:
 				forward_icmp_type = ICMP_TYPE.PING
-			elif icmp_type == 0 and packetID == self._icmp_id:
+			elif icmp_type == ICMP_ECHO_REPLY and code==0 and packetID==self._icmp_id:
 				forward_icmp_type = ICMP_TYPE.PONG
 			else:
 				continue
 
-			payload = np.concatenate((convi2b(forward_icmp_type, 1), convi2b(seq_id, 1), np.frombuffer(recPacket[28:], dtype=np.uint8)))
+			# convert the byte order
+			payload = np.concatenate((convi2b(forward_icmp_type, 1), convi2b(seq_id, 1), np.frombuffer(recPacket[28:][::-1], dtype=np.uint8)))
 
 			self._ip.send(IP_TYPE.ICMP, src[0], '192.168.1.2', payload)
 
 	# Reference https://github.com/samuel/python-ping/blob/master/ping.py
 
 	def _send_one_icmp(self, std_icmp_type, dest_addr, seq_id, data):
+		data = data[::-1]
 		dest_addr = socket.gethostbyname(dest_addr)
 		# Header is type (8), code (8), checksum (16), id (16), sequence (16)
 		my_checksum = 0
 		# Make a dummy heder with a 0 checksum.
-		header = struct.pack("bbHHh", std_icmp_type, 0, my_checksum, self._icmp_id, seq_id)
+		header = struct.pack("!bbHHh", std_icmp_type, 0, my_checksum, self._icmp_id, seq_id)
 		# Calculate the checksum on the data and the dummy header.
 		my_checksum = self.icmp_checksum(header + data)
 		# Now that we have the right checksum, we put that in. It's just easier
 		# to make up a new header than to stuff it into the dummy.
 		header = struct.pack(
-			"bbHHh", std_icmp_type, 0, socket.htons(my_checksum), self._icmp_id, seq_id
+			"!bbHHh", std_icmp_type, 0, socket.htons(my_checksum), self._icmp_id, seq_id
 		)
 		packet = header + data
 		print(f'ICMP sending packet {packet} to {dest_addr}')
