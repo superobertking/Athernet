@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-12-16 05:19:10
+# @Last Modified time: 2019-01-16 17:58:55
 
 
 from sender import Sender
@@ -234,7 +234,7 @@ class MAC(object):
 		self._stop_and_wait(dst, MACTYPE.START, frame_id_list[0], np.array([frame_cnt], dtype=np.uint8))
 		print('sent start')
 
-		window_size = 200
+		window_size = 1
 
 		ack_set = set()
 		retry = 0

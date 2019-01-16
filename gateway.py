@@ -1,4 +1,4 @@
-from ip import IP, IP_TYPE, ICMP_TYPE
+from ip import IP, IP_TYPE, ICMP_TYPE, TCP_TYPE
 from aocket import Aocket
 from ipaddress import ip_address
 import queue
@@ -8,6 +8,7 @@ import socket
 import time
 import threading
 import fcntl
+import select
 from auxiliaries import *
 import numpy as np
 
@@ -21,14 +22,14 @@ class Gateway(object):
 		super(Gateway, self).__init__()
 		self._kwargs = kwargs
 		self._ip = IP(**kwargs)
-		self._nat_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		self._icmp_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+		self._nat_sock = {}
+		# self._icmp_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
 		# self._icmp_sock.setsockopt(socket.SOL_IP, socket.IP_TTL, 1)
 		# self._icmp_sock.setsockopt(socket.SOL_IP, socket.IP_HDRINCL, 1)
 		# fcntl.fcntl(self._icmp_sock, fcntl.F_SETFL, os.O_NONBLOCK)
 		self._acoustic_work_thread = threading.Thread(target=self._acoustic_work, daemon=True)
 		self._nat_work_thread = threading.Thread(target=self._nat_work, daemon=True)
-		self._icmp_work_thread = threading.Thread(target=self._icmp_work, daemon=True)
+		# self._icmp_work_thread = threading.Thread(target=self._icmp_work, daemon=True)
 		self._icmp_id = os.getpid() & 0xFFFF
 		self._stop_working = threading.Event()
 
@@ -41,48 +42,127 @@ class Gateway(object):
 
 	def start(self):
 		self._ip.start()
-		self._nat_sock.bind(('0.0.0.0', 10001))
+		# self._nat_sock.bind(('0.0.0.0', 10001))
 		self._acoustic_work_thread.start()
 		self._nat_work_thread.start()
-		self._icmp_work_thread.start()
+		# self._icmp_work_thread.start()
 
 	def shutdown(self):
 		self._stop_working.set()
-		self._nat_sock.close()
-		self._icmp_sock.close()
+		# self._nat_sock.close()
+		for src in self._nat_sock:
+			self._nat_sock[src][0].close()
+		# self._icmp_sock.close()
 		self._ip.shutdown()
 		self._acoustic_work_thread.join()
 		self._nat_work_thread.join()
-		self._icmp_work_thread.join()
+		# self._icmp_work_thread.join()
 
 	def _acoustic_work(self):
 		while not self._stop_working.is_set():
 			try:
-				typ, src_addr, dst_addr, payload = self._ip.recv(timeout=1)
+				typ, src_ip, dst_ip, payload = self._ip.recv(timeout=1)
 			except queue.Empty:
 				continue
-			src_addr, dst_addr = ip_address(src_addr).exploded, ip_address(dst_addr).exploded
+			src_ip, dst_ip = ip_address(src_ip).exploded, ip_address(dst_ip).exploded
 			if typ == IP_TYPE.UDP:
-				src_port, dst_port, payload = Aocket.extract_payload(payload)
-				print(dst_addr, dst_port)
-				self._nat_sock.sendto(payload.tobytes(), (dst_addr, dst_port))
+				src_port, dst_port, payload = Aocket.extract_udp_payload(payload)
+				src, dst = (src_ip, src_port), (dst_ip, dst_port)
+				print(f'UDP from {src} to {dst}')
+
+				# create socket if not present in NAT table
+				if src not in self._nat_sock:
+					self._nat_sock[src] = socket.socket(socket.AF_INET, socket.SOCK_DGRAM), src, dst
+
+				self._nat_sock[src][0].sendto(payload.tobytes(), dst)
+
+			elif typ == IP_TYPE.TCP:
+				src_port, dst_port, typ, payload = Aocket.extract_tcp_payload(payload)
+				src, dst = (src_ip, src_port), (dst_ip, dst_port)
+				print(f'TCP from {src} to {dst} type {typ}')
+
+				if typ == TCP_TYPE.SYN:
+					# create socket if not present in NAT table
+					if src not in self._nat_sock:
+						self._nat_sock[src] = socket.socket(socket.AF_INET, socket.SOCK_STREAM), src, dst
+						self._nat_sock[src][0].connect(dst)
+				elif typ == TCP_TYPE.FIN:
+					if src in self._nat_sock:
+						self._nat_sock[src][0].close()
+						del self._nat_sock[src]
+				elif typ == TCP_TYPE.DATA:
+					if src in self._nat_sock:
+						print(self._nat_sock[src][0].sendto(payload.tobytes(), dst))
+					else:
+						print(f'Source {src} not found in NAT table')
+				elif typ == TCP_TYPE.ACK:
+					pass
+				else:
+					print(f'Unknown TCP type: {typ}')
+
 			elif typ == IP_TYPE.ICMP:
 				icmp_type, seq_id = payload[0], payload[1]
 				if icmp_type == ICMP_TYPE.PING:
-					self._send_one_icmp(ICMP_ECHO_REQUEST, dst_addr, seq_id, payload[2:].tobytes())
+					self._send_one_icmp(ICMP_ECHO_REQUEST, dst_ip, seq_id, payload[2:].tobytes())
 				elif icmp_type == ICMP_TYPE.PONG:
-					self._send_one_icmp(ICMP_ECHO_REPLY, dst_addr, seq_id, payload[2:].tobytes())
+					self._send_one_icmp(ICMP_ECHO_REPLY, dst_ip, seq_id, payload[2:].tobytes())
 			else:
 				print("Unsupported protocol")
 
 	def _nat_work(self):
 		while not self._stop_working.is_set():
-			try:
-				payload, src = self._nat_sock.recvfrom(4096)
-			except socket.error:
-				return
-			src_addr, dst_addr, payload = Aocket.encapsulate_payload(IP_TYPE.UDP, src, ('192.168.1.2', 16384), np.frombuffer(payload, dtype=np.uint8))
-			self._ip.send(IP_TYPE.UDP, src_addr, dst_addr, payload)
+			# print(self._nat_sock)
+			ready , _, _ = select.select([sock for sock, _, _ in self._nat_sock.values()], [], [], 1)
+			if not ready:
+				# print(f'NAT work timeout {ready}')
+				continue
+			# print(f'NAT work get {ready}')
+			for sock in ready:
+				try:
+					payload, src = sock.recvfrom(4096)
+				except socket.error:
+					return
+				if sock.type == socket.SOCK_DGRAM:
+					_, dst, _ = self._find(sock)
+					src_ip, dst_ip, payload = Aocket.encapsulate_payload(
+						IP_TYPE.UDP, src, dst, np.frombuffer(payload, dtype=np.uint8))
+
+					self._ip.send(IP_TYPE.UDP, src_ip, dst_ip, payload)
+
+				elif sock.type == socket.SOCK_STREAM:
+					# must override src (None returned by recvfrom)
+					_, dst, src = self._find(sock)
+
+					if dst is None:
+						print(f'Socket not found!')
+						continue
+
+					if len(payload) == 0:
+						print('Gateway TCP closing connection')
+						payload = TCP_TYPE.FIN_PAYLOAD
+						self._close(sock)
+					else:
+						payload = np.concatenate((TCP_TYPE.DATA_PAYLOAD, np.frombuffer(payload, dtype=np.uint8)))
+
+					src_ip, dst_ip, payload = Aocket.encapsulate_payload(
+						IP_TYPE.TCP, src, dst, np.frombuffer(payload, dtype=np.uint8))
+
+					self._ip.send(IP_TYPE.TCP, src_ip, dst_ip, payload)
+
+				else:
+					print(f'Unknown socket type: {sock.type}')
+
+	def _find(self, sock):
+		for src in self._nat_sock:
+			if self._nat_sock[src][0] is sock:
+				return self._nat_sock[src]
+		return None, None, None
+
+	def _close(self, sock):
+		sock.close()
+		_, src, dst = self._find(sock)
+		if src is not None:
+			del self._nat_sock[src]
 
 	def _icmp_work(self):
 		while not self._stop_working.is_set():

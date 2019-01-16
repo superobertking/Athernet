@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 15:42:10
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-28 00:53:16
+# @Last Modified time: 2019-01-16 16:05:37
 
 
 from constants import *
@@ -69,7 +69,7 @@ class Receiver(object):
 					if rate > max_rate:
 						max_rate = rate
 						cursor_align = i
-					# print("big rate",rate)
+					print("big rate",rate)
 				else:
 					if cursor_align is None:
 						continue

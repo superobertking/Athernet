@@ -19,12 +19,22 @@ class ICMP_TYPE:
 	PING = 0
 	PONG = 3
 
+class TCP_TYPE:
+	SYN = 0
+	ACK = 1
+	FIN = 2
+	DATA = 3
+
+for name in ['SYN', 'ACK', 'FIN', 'DATA']:
+	setattr(TCP_TYPE, name + '_PAYLOAD', np.array([getattr(TCP_TYPE, name)], dtype=np.uint8))
+
 
 class IP(object):
 	"""docstring for IP"""
 	def __init__(self, **kwargs):
 		super(IP, self).__init__()
 		self._mac = MAC(**kwargs)
+		self._arp = {'192.168.8.8': 0x77, '202.120.58.157': 0xee}
 
 	def __enter__(self):
 		self.start()
@@ -43,7 +53,8 @@ class IP(object):
 		ip_header = np.array([typ], dtype=np.uint8)
 		ip_header = np.concatenate((ip_header, np.frombuffer(ip_address(src_addr).packed + ip_address(dst_addr).packed, dtype=np.uint8)))
 		print('IP send payload length:', len(payload))
-		return self._mac.send(0xff, np.concatenate((ip_header, payload)), wait=wait)
+		print('ARP', self._arp[dst_addr])
+		return self._mac.send(self._arp[dst_addr], np.concatenate((ip_header, payload)), wait=wait)
 
 	def recv(self, timeout=None):
 		data = self._mac.recv(timeout=timeout)

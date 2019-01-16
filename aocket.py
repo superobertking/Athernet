@@ -5,12 +5,16 @@ import time
 from auxiliaries import *
 import numpy as np
 import ipaddress
-from ip import IP, IP_TYPE, ICMP_TYPE
+from ip import IP, IP_TYPE, ICMP_TYPE, TCP_TYPE
 from ipaddress import ip_address
 
 
 # UDP structure
 # | SRC port(2) | DEST port(2) | payload |
+
+# TCP structure
+# | SRC port(2) | DEST port(2) | TYPE(1) | payload |
+
 
 class Aocket(object):
 	"""docstring for Aocket"""
@@ -86,11 +90,29 @@ class Aocket(object):
 					self._icmp_queue.put((src_ipaddr, dst_ipaddr, payload))
 				else:
 					print(f'ICMP Type {icmp_type} not supported!')
-			else:
-				src_port, dst_port, payload = self.extract_payload(payload)
+
+			elif typ == IP_TYPE.UDP:
+				src_port, dst_port, payload = self.extract_udp_payload(payload)
 				# print('Aocket received packet from', src_ipaddr, src_port)
 				q = self._bind.setdefault(dst_port, queue.Queue())
 				q.put((src_ipaddr, src_port, payload))
+
+			elif typ == IP_TYPE.TCP:
+				src_port, dst_port, typ, payload = self.extract_tcp_payload(payload)
+				q = self._bind.setdefault(dst_port, queue.Queue())
+				q.put((src_ipaddr, src_port, payload))
+
+			else:
+				print(f'Unknown aocket type: {typ}')
+
+	def connect(self, src, dst):
+		self.send(IP_TYPE.TCP, src, dst, TCP_TYPE.SYN_PAYLOAD)
+
+	def close(self, src, dst):
+		self.send(IP_TYPE.TCP, src, dst, TCP_TYPE.FIN_PAYLOAD)
+
+	def send_tcp(self, src, dst, payload):
+		self.send(IP_TYPE.TCP, src, dst, np.concatenate((TCP_TYPE.DATA_PAYLOAD, payload)))
 
 	# Return (dst_ipaddr, dst_port, payload)
 	def recv(self, port, timeout=None):
@@ -98,15 +120,19 @@ class Aocket(object):
 		return q.get(block=True, timeout=timeout)
 
 	def getmyipaddr(self):
-		return '0.0.0.0'
+		return '192.168.8.8'
 
 	@staticmethod
-	def extract_payload(payload):
+	def extract_udp_payload(payload):
 		return convb2i(payload[:2]), convb2i(payload[2:4]), payload[4:]
 
 	@staticmethod
+	def extract_tcp_payload(payload):
+		return convb2i(payload[:2]), convb2i(payload[2:4]), payload[4], payload[5:]
+
+	@staticmethod
 	def encapsulate_payload(typ, src, dst, payload):
-		if typ==IP_TYPE.UDP:
+		if typ == IP_TYPE.UDP or typ == IP_TYPE.TCP:
 			src_ipaddr, src_port = src
 			dst_ipaddr, dst_port = dst
 			header = np.concatenate((convi2b(src_port, 2), convi2b(dst_port, 2)))
