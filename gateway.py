@@ -101,11 +101,11 @@ class Gateway(object):
 					print(f'Unknown TCP type: {typ}')
 
 			elif typ == IP_TYPE.ICMP:
-				icmp_type, seq_id = payload[0], payload[1]
+				icmp_type, seq_id, icmp_id = payload[0], payload[1], convb2i(payload[2:4])
 				if icmp_type == ICMP_TYPE.PING:
-					self._send_one_icmp(ICMP_ECHO_REQUEST, dst_ip, seq_id, payload[2:].tobytes())
+					self._send_one_icmp(ICMP_ECHO_REQUEST, dst_ip, seq_id, payload[2:].tobytes(), icmp_id)
 				elif icmp_type == ICMP_TYPE.PONG:
-					self._send_one_icmp(ICMP_ECHO_REPLY, dst_ip, seq_id, payload[2:].tobytes())
+					self._send_one_icmp(ICMP_ECHO_REPLY, dst_ip, seq_id, payload[2:].tobytes(), icmp_id)
 			else:
 				print("Unsupported protocol")
 
@@ -176,12 +176,12 @@ class Gateway(object):
 			icmp_type, code, _, packetID, seq_id = struct.unpack("!bbHHh", recPacket[20:28])
 			# seq_id >>= 8
 			print(f'Gateway received std ICMP packet from {src} with icmp_type {icmp_type} code {code} and seq_id {seq_id}')
-			print(f"packetID: {packetID} ; self._icmp_id: {self._icmp_id} ; recP[40]={recPacket[40]}")
+			print(f"packetID: {packetID} ; self._icmp_id: {self._icmp_id} ; recP[28]={recPacket[28]}")
 
 			# Filters out the echo request itself. 
 			# This can be tested by pinging 127.0.0.1 
 			# You'll see your own request
-			if icmp_type == ICMP_ECHO_REQUEST and code==0 and packetID!=self._icmp_id:
+			if icmp_type == ICMP_ECHO_REQUEST and code==0:
 				forward_icmp_type = ICMP_TYPE.PING
 			elif icmp_type == ICMP_ECHO_REPLY and code==0 and packetID==self._icmp_id:
 				forward_icmp_type = ICMP_TYPE.PONG
@@ -189,25 +189,27 @@ class Gateway(object):
 				continue
 
 			# convert the byte order
-			payload = np.concatenate((convi2b(forward_icmp_type, 1), convi2b(seq_id, 1), np.frombuffer(recPacket[28:][::-1], dtype=np.uint8)))
+			payload = np.concatenate((convi2b(forward_icmp_type, 1), convi2b(seq_id, 1), convi2b(packetID, 2), np.frombuffer(recPacket[28:][::-1], dtype=np.uint8)))
 
 			self._ip.send(IP_TYPE.ICMP, src[0], '192.168.1.2', payload)
 
 	# Reference https://github.com/samuel/python-ping/blob/master/ping.py
 
-	def _send_one_icmp(self, std_icmp_type, dest_addr, seq_id, data):
+	def _send_one_icmp(self, std_icmp_type, dest_addr, seq_id, data, icmp_id):
 		data = data[::-1]
 		dest_addr = socket.gethostbyname(dest_addr)
 		# Header is type (8), code (8), checksum (16), id (16), sequence (16)
 		my_checksum = 0
 		# Make a dummy heder with a 0 checksum.
-		header = struct.pack("!bbHHh", std_icmp_type, 0, my_checksum, self._icmp_id, seq_id)
+		header = struct.pack("!bbHHh", std_icmp_type, 0, my_checksum, icmp_id, seq_id)
 		# Calculate the checksum on the data and the dummy header.
 		my_checksum = self.icmp_checksum(header + data)
 		# Now that we have the right checksum, we put that in. It's just easier
 		# to make up a new header than to stuff it into the dummy.
+		tt = socket.htons(my_checksum)
+		print("------------------", tt);
 		header = struct.pack(
-			"!bbHHh", std_icmp_type, 0, socket.htons(my_checksum), self._icmp_id, seq_id
+			"!bbHHh", std_icmp_type, 0, ((tt&0xff)<<8)|(tt>>8), icmp_id, seq_id
 		)
 		packet = header + data
 		print(f'ICMP sending packet {packet} to {dest_addr}')
