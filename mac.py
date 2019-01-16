@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-11-17 21:57:47
 # @Last Modified by:   robertking
-# @Last Modified time: 2019-01-16 17:58:55
+# @Last Modified time: 2019-01-16 22:14:53
 
 
 from sender import Sender
@@ -48,6 +48,7 @@ class MAC(object):
 		self._work_thread = threading.Thread(target=self._work, daemon=True)
 		self._stop_working = threading.Event()
 		self._kwargs = kwargs
+		self._lock = threading.Lock()
 
 	def __enter__(self):
 		self.start()
@@ -220,6 +221,8 @@ class MAC(object):
 		return mfu, timediff
 
 	def send(self, dst, packet, wait=True):
+		self._lock.acquire()
+
 		packet_length = convi2b(len(packet), 4)
 
 		# max fragment unit
@@ -274,6 +277,8 @@ class MAC(object):
 		# 	print('sending frame {}'.format(frame_id))
 		# 	self._stop_and_wait(dst, MACTYPE.DATA, frame_id, fragment)
 		# 	print('sent frame {}'.format(frame_id))
+
+		self._lock.release()
 
 	def recv(self, timeout=None):
 		return self._net_queue.get(timeout=timeout)

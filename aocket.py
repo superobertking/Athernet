@@ -80,7 +80,7 @@ class Aocket(object):
 			except:
 				continue
 			if typ==IP_TYPE.ICMP:
-				icmp_type, seq_id = payload[0], payload[1]
+				icmp_type, seq_id, icmp_id = payload[0], payload[1], convb2i(payload[2:4])
 				if icmp_type == ICMP_TYPE.PING: #and dst_ipaddr == self.getmyipaddr():
 					print(f'Aocket received PING')
 					payload[0] = ICMP_TYPE.PONG
