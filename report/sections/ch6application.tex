@@ -1,0 +1,13 @@
+\chapter{Application: FTP}\label{ch:ch6label}
+
+The application layer protocol we implemented is the File Transfer Protocol (FTP). Since we do not need to implement SSL, we can omit the session layer and the presentation layer and base the FTP client directly on the toy TCP.
+
+\section{Commands}
+    \subparagraph{}
+    Our FTP client has a interactive command interface, and the user can input the FTP command after each ``{\tt > }'' prompt and see the response from the server after each ``{\tt < }''.
+    \subparagraph{}
+    We support a subset of FTP commands, USER, PASS, PWD, CWD, PASV, LIST and RETR.  These command represents ``username'', ``password'', ``print working directory'', ``change working directory'', ``passive mode'', ``list directory'' and ``retrieve file''. Our FTP client uses a regular expression to check the validity of the input command, if the command is well-constructed, the command will be directly transmitted to the FTP server and waits for the reply. The client will then check the response FTP code to see if there is an an occurs or the command has performed successfully. In most cases, when an error occur, it won't mess up the FTP client so the client just print out the returned message from the server. When an error message is return during LIST or RETR, the client will cancel the current transmission and return to the.
+
+\section{Multi-port Connection}\label{sec:ftpsynch}
+    \subparagraph{}
+    After specifying the remote FTP server address and port, the client initiates a toy TCP connection from a local port, as the control stream. The commands are then sent through this connection. When doing LIST or RETR, FTP needs to start a new connection to the destination previously given by the PASV command. Thanks to the multi-port connection feature of our Aocket, our FTP client could initiate a new TCP connection easily. The newly established connection works as the data stream, and data is transmitted from the remote to the local host. When The connection is closed or the transmitted length has reached the file size, the transmitted file or list is stored in a new file the on the local machine. Finally, after the user quit the interactive command interface, the client closes the TCP connection and then quits itself.

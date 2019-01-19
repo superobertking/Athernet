@@ -1,0 +1,13 @@
+\chapter{Network Layer}\label{ch:ch4label}
+
+The network layer adds the IP fields to the packet provided by the transport layer and then give it to the data link layer. In our implementation, this is rather a thin layer since most of the works, including separating large packets has been done by the legacy code in our robust MAC class. Therefore, we only adds the source and destination ip information and just pass the packet to the layer below. As a future work, we may consider move the packet seperation code from the MAC to our IP class.
+
+\section{Packet}
+    \subparagraph{}
+    We implemented the IPv4 address convention: 4 bytes for source ip address and 4 bytes for destination ip address. The packet structure is as simple as follows. The {\tt PROTOCOL} field can be used by the transport layer, this will be covered in the next chapter.
+
+    $$|PROTOCOL(1B)|SRC\_ADDR(4B)|DST\_ADDR(4B)|PAYLOAD(var)|$$
+
+\section{Static ARP}
+    \subparagraph{}
+    To send the packet to the correctly destination and also ensure it being correctly recognized by the peer MAC, we need to convert the IP address to the MAC address and send it to the MAC. Since there only exist two hosts in the acoustic network, we assign static IP address without using DHCP. We keeps a python {\tt map} object acting as the ARP table to map the IP address to the corresponding MAC address.

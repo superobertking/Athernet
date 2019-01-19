@@ -1,0 +1,74 @@
+\chapter{Physical Layer}\label{ch:ch2label}
+
+This layer aims to convert between binary symbols and acoustic signals. This layer works with directly with the DAC and ADC. Our design achieve high performance and 100\% accuracy without introducing interference.
+
+\section{Signal Transmission}
+% You can also have examples in your document such as in example~\ref{ex:simple_example}.
+% \begin{example}{An Example of an Example}
+%   \label{ex:simple_example}
+%   Here is an example with some math
+%   \begin{equation}
+%     0 = \exp(i\pi)+1\ .
+%   \end{equation}
+%   You can adjust the colour and the line width in the {\tt macros.tex} file.
+% \end{example}
+\subparagraph{}
+For the convenience in calculation and higher transmission rate, we configure the audio card working in the sample rate of 48,000Hz. The frequency of the carrier wave we use is 8kHz which balances the signal reconstruction and the throughput. Due to the Nyquist–Shannon sampling theorem, given the fixed sample rate, we can hardly determine the original signal if its frequency is too high. On the other hand, the higher frequency of the carrier wave is, the more information we can transfer in the fixed time duration. With 48,000Hz sample rate and 8kHz wave frequency, we assign exact 6 samples to each cycle of the signal, which achieves high quality and low bias during the signal transmission in our implementation, 
+
+\section{Encoding and Decoding}
+\subparagraph{}
+The unit of encoding and decoding is byte. As the first project requests transmitting data with specified length, we add extra header(2 bytes) to indicate the length. We deem the input data as the payload then insert header before it.
+\subsection{Deviation Control}
+\subparagraph{}
+Since there is no clock signal to synchronize the data transmission, correctly recognizing symbols relies on the alignment of the preamble. However there is tiny bias when sending each symbol (may caused by hardware limitation) and it can accumulate and result in nontrivial deviation if the same symbol replicates many times. To prevent this kind of error, we've tried 4b5b encoding to avoid the continuously same symbols. Considering the loss of 20\% throughput, we later improve the symbol recognition and the 4b5b coding is not needed anymore.
+\subsection{Error Correction}
+\subparagraph{}
+The header which includes length field is important. Once an error occurs in the header (like modified the length to a larger number), it can badly interfere the transmission process. To reduce this potential risk, we apply Reed-Solomon code to protect the header, which can recognize the interfere and try to repair the header. As Reed-Solomon costs relatively much time to compute, it is expensive to apply it for the whole frame. Instead we simply calculate CRC for the payload field and attach it at the end of the payload.
+
+\section{Modulation and Demodulation}
+\subsection{Symbol Representation}
+\subparagraph{}
+After comparing the effect of Amplitude Shift Key(ASK), Frequency Shift Key(FSK) and Phase Shift Key (PSK), we select PSK as our choice. We use too signal with phase shift of 180 degree to denote the two logical symbol, 0 and 1, as following:
+\[
+    \begin{aligned}
+        SIG\_HIGH &= \cos(2\pi ft)\\
+        SIG\_LOW &= -\cos(2\pi ft)
+    \end{aligned}
+\]
+where f means the frequency of the carrier wave, or 8kHz as mentioned above. A single cycle of SIG\_HIGH represents the logical 1 and that of SIG\_LOW represents the logical 0.
+\subparagraph{}
+To demodulate the signal and recognize the symbol, we multiply the received signal by a single cycle of  $\cos(2\pi ft)$. And as learned in class
+\[
+    \begin{aligned}
+        \cos(2\pi ft) \cos(2\pi ft) &= \frac{1}{2}\left(\cos(2\pi2ft)+1\right)\\
+        \cos(2\pi ft + \pi) \cos(2\pi ft) &= \frac{1}{2}\left(\cos(2\pi2ft)-1\right)
+    \end{aligned}
+\]
+The part of $\cos(2\pi 2ft)$ can be eliminated by a filter. Since what we received is discrete samples, we dot the signal as multiplication and calculate the average to cancel the component of $\cos$. After that we judge the average whether it is positive or negative then map it to the corresponding logical value.
+\subsection{Preamble}
+\subparagraph{}
+We designed an preamble to help locate the start position of the each frame. Though the standard Ethernet use a special pattern of symbols to make up its preamble, we find it is not highly reliable in the interfered environment. In our design, our preamble consists of a wave with increasing frequency and a one with decreasing frequency, which is significantly different from the noise.
+
+\subparagraph{}
+To recognize the preamble, our solution based on an the fact that the result of the dot operation reaches the maximum when the two signal stay the same, under the power constrain of the received signal. Our solution calculate the their dot result and the power of the incoming signal, then divide them as the coupling rate.
+\[
+    couple = \frac{dot~result}{power}
+\]
+Once the coupling rate exceeds the threshold, we treat it as a available preamble. The initial value of the threshold is set by our experiment. And it will be constantly correct based on the history data during its runtime.
+\subparagraph{}
+In our implementation, more technique are added to prevent the interfere and get perfect location. A buffer and a  time-level threshold is used to prevent the peak values of a few single samples. Besides the multiple stage check is applied to promise the correction of the preamble offset in the audio stream.
+
+\subsection{Improved Symbol Recognition}
+\subparagraph{}
+Our design keeps working fine until the transmission bits is greater than around 4000 in a single frame. After that the demodulation result starts getting random and sometimes shows exact inverted pattern of the correct one. We then inspect the result of symbol splitting and find out the disorder is caused by the accumulated bias as mentioned above. Through the alignment of the preamble is perfect but one-sample bias occurs after transmit every 1500-2200 samples. Since we only assign 6 samples to each symbol, a bias of one or two sample can badly interfered the result. Thus we design a small sliding window to dynamically adjust the offset the current symbol. When matching a symbol, we slide its offset within a small range and choose the one with maximum absolute value of its dot result, which means the highest coupling. After adding this traits, we achieve 100\% accuracy with data of arbitrary pattern in arbitrary length.
+
+\subsection{Performance}
+\subparagraph{}
+Out final implement achieve 8kbps transmission rate, which means it can finish transmit 6250 bytes raw data within 6.25s (typical value). Notice that we use one cycle of SIG\_HIGH and SIG\_LOW to represent the corresponding symbol. Actually the layer can perform better by using only a half cycle to represent a logical value. In our experimental test, it succeeds to transmit 6250 bytes within 3.2s with 100\% accuracy. The latter scheme is not adopted in the further projects since its performance has much exceeded the request.
+
+% \paragraph{A Paragraph}
+% You can also use paragraph titles which look like this.
+
+% \subparagraph{A Subparagraph} Moreover, you can also use subparagraph titles which look like this\todo{Is it possible to add a subsubparagraph?}. They have a small indentation as opposed to the paragraph titles.
+
+% \todo[inline,color=green]{I think that a summary of this exciting chapter should be added.}
