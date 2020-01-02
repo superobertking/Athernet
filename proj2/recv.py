@@ -6,9 +6,8 @@ import time
 import argparse
 import math
 import queue
+from datetime import datetime
 import matplotlib.pyplot as plt
-
-usage_line = ' press <enter> to quit, +<enter> or -<enter> to change scaling '
 
 
 def int_or_str(text):
@@ -116,26 +115,50 @@ def handle_buffer(sig_recv):
 	cursor = 0
 	print("gap skipped, start decoding")
 
+	start_time = datetime.now()
+
 	cnt_decode = 0
 
 	stat = []
-	res = ''
+	res = []
 	# decode
 	res_split = []
 	seq_ans = []
 	sigsum_ans = []
 	view_offset = 0
+	corr_bias = list(range(-1, 2))
 	while cnt_decode<NUM_TRANS:
-		while sig_buffer.size<cursor+FRAMECNT:
+		while sig_buffer.size<cursor+FRAMECNT+max(corr_bias):
 			sig = sig_recv.get()[1]
 			sig_buffer = np.concatenate((sig_buffer,sig))
-		for i in range(cursor,sig_buffer.size-FRAMECNT+1,FRAMECNT):
+
+		i = cursor
+		while i<sig_buffer.size-FRAMECNT+1:
+
+		# for i in range(cursor,sig_buffer.size-FRAMECNT+1,FRAMECNT):
 		#	print("size of sig_buffer: ", sig_buffer.size)
 		#	print("size of SIG_HI: ", SIG_HI.size)
-			sig_shift = sig_buffer[i:i+FRAMECNT]*SIG_HI
-			# sig_shift = sig_shift[FRAMECNT//3:FRAMECNT*2//3]
-			# print(np.max(sig_shift), np.min(sig_shift))
-			sigsum = np.sum(sig_shift)
+
+
+			offset_best = 0
+			max_corr = 0
+
+			for offset in corr_bias:
+				k = i+offset
+				if k<0 or k+FRAMECNT>=len(sig_buffer):
+					continue
+
+				sig_shift = sig_buffer[k:k+FRAMECNT]*SIG_HI
+				# sig_shift = sig_shift[FRAMECNT//3:FRAMECNT*2//3]
+				# print(np.max(sig_shift), np.min(sig_shift))
+				sigsum = np.sum(sig_shift)
+				if sigsum*sigsum>max_corr*max_corr:
+					max_corr = sigsum
+					offset_best = offset
+
+			i += offset_best
+			sigsum = max_corr
+
 			# print("* %12.6f" % (sigsum/FRAMECNT))
 			# if len(stat) < 100:
 			# 	stat.append(sigsum)
@@ -147,20 +170,27 @@ def handle_buffer(sig_recv):
 			div = 0
 			# div = 0.15
 			cnt_decode += 1
-			res += '1' if sigsum > div else '0'
+			res.append('1' if sigsum > div else '0')
+
 			if view_offset <= i < view_offset + 10000:
 				res_split.append(i - view_offset)
 				seq_ans += [0.5 if sigsum > div else -0.5]
 				sigsum_ans += [sigsum / FRAMECNT]
+			i += FRAMECNT
+
 		# print("LOOP",i,cursor)
-		cursor = i+FRAMECNT
+		cursor = i
 		if sig_buffer.size>10*FRAMECNT and False:
 			cursor = cursor-(sig_buffer.size-FRAMECNT)
 			sig_buffer = sig_buffer[-FRAMECNT:]
 
+	end_time = datetime.now()
+
+	print(end_time - start_time)
+
 	with open('OUTPUT.txt', 'w') as fout:
 		res_trunc = res[:NUM_TRANS]
-		fout.write(res_trunc)
+		fout.write(''.join(res_trunc))
 		# res_trunc = res[:NUM_TRANS_45]
 		# print(len(res_trunc), NUM_TRANS_45)
 		# fout.write(''.join(['{:04b}'.format(decode(int(res_trunc[i*5:i*5+5], 2))) for i in range(NUM_TRANS_45 // 5)]))
@@ -171,17 +201,17 @@ def handle_buffer(sig_recv):
 	fig = plt.figure()
 	plt.plot(sig_buffer[view_offset:view_offset + 10000])
 	plt.plot(res_split, seq_ans, '-g')
-	plt.plot(res_split, sigsum_ans, '-g')
+	plt.plot(res_split, sigsum_ans, '-b')
 	for i in res_split:
 		plt.plot([i,i], [-1,1], '-r')
 	print(len(res_split))
-	# plt.show()
+	plt.show()
 
 def read_device():
 	try:
 		with sd.InputStream(device=args.device, channels=1, callback=receive_signal,
-							blocksize=int(samplerate * args.block_duration / 1000),
-							samplerate=samplerate):
+							samplerate=SAMPLERATE):
+							# blocksize=int(SAMPLERATE * args.block_duration / 1000),
 			handle_buffer(sig_recv)
 	except KeyboardInterrupt:
 		# parser.exit('Interrupted by user')

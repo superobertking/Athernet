@@ -2,7 +2,7 @@
 # @Author: robertking
 # @Date:   2018-10-09 23:38:13
 # @Last Modified by:   robertking
-# @Last Modified time: 2018-11-17 01:50:49
+# @Last Modified time: 2018-11-17 20:07:22
 
 
 import sounddevice as sd
@@ -20,7 +20,7 @@ def encode(data):
 
 def modulate(encoded):
     # return LUT_MOD_5[encoded]
-    return LUT_MOD_4[encoded]
+    return LUT_MOD[encoded]
 
 def readfile():
     with open('INPUT.txt') as f:
@@ -36,7 +36,12 @@ if __name__ == '__main__':
     # data += '0' * (length % 4)
 
     # print([encode(int(data[i*4:(i+1)*4], 2)) for i in range(len(data) // 4)])
-    modulated = np.concatenate([modulate(encode(int(data[i*4:(i+1)*4], 2))) for i in range(len(data) // 4)])
+
+    with open('INPUT.bin', 'rb') as f:
+        data = f.read()[:NUM_TRANS]
+
+    modulated = np.concatenate([modulate(encode(d)) for d in data])
+    # modulated = np.concatenate([modulate(encode(int(data[i*4:(i+1)*4], 2))) for i in range(len(data) // 4)])
     print(len(modulated))
 
     sd.play(np.concatenate((HEADER,GAP,modulated)),blocking=True,samplerate=SAMPLERATE,device=2)

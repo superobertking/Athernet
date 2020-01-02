@@ -1,0 +1,35 @@
+\chapter{Cross Layer}\label{ch:ch7label}
+
+This section talks about the cross layer applications we implemented in our project. These applications manipulates both the IP and the transport layer packets, usually used for packet forwarding.
+
+\section{Gateway}
+
+    \subparagraph{}
+    The gateway is the only way that connects the Athernet LAN and the WAN, when transmitting from a Athernet LAN host to a remote host, the gateway needs to do some translation jobs to ensure the packet can be correctly recognized by the modern network systems. In addition, the gateway also needs to so it needs to do maintain the NAT table to store the existing connections and exchange of packets in and out the acoustic network.
+    
+    \subsection{Dynamic Mapping}
+        \subparagraph{}
+        The dynamic mapping is done by connection, when a packet is received from a Athernet LAN host, the gateway will then check the NAT table if there is a existing connection from the source to the destination. The source is a pair of <source\_ip, source\_port>. If the gateway finds the source in the table, the packet is repacked with the gateway's ip and local port, and the transmit to the remote by using {\tt socket}. If the source does not present in the NAT table, the gateway starts a new connection by creating a new {\tt socket} instance and store it in the NAT table in the entry with key of source.
+
+    \subsection{TCP Connection Forwarding}
+        \subparagraph{}
+        When the LAN host is sending a TCP packet to the remote host, the gateway needs to convert the packet from our toy TCP packet to the real TCP packet by using {\tt socket}. When receiving a SYN in the toy TCP, the gateway starts a new connection by using the {\tt socket.connect}. When receiving the DATA, the gateway extracts the payload and sends the data via {\tt socket.send}. For the FIN, the gateway just call {\tt socket.close} and then delete the NAT table entry.
+
+    \subsection{Multi-port Listening}
+        \subparagraph{}
+        As the connections to the WAN peers creates a lot of {\tt socket} connections, we need to use a simple way to collect the ready {\tt socket} streams and transmit the received data back to the Athernet LAN hosts. We created a looping thread that uses the system call ``select'' on the list of all {\tt sockets} objects to retain the ready socket streams, and the put converted Aocket packet back to the sending queue. The only thing special about this thread is the termination of TCP connections. The termination of the transmission is detected by the instant return from {\tt socket.recv} with an empty payload. The thread then sends a FIN back to the Athernet host and deletes the entry in the NAT table.
+        
+    \subsection{ICMP Endian Issues}
+    \subparagraph{}
+    There are several problem we met when achieving ICMP. The obvious one is about the endian. We know the standard Ethernet uses big-endian while the common x86 platform runs in little-endian. When we achieve this part, which directly communicates with the exist Ethernet, we have to carefully notice the issues about the endian. Not only the data field but the header information and the checksum are also need to match the correct endian. We once found that the sequence number of the received ICMP Echo Request (PING) is multiplied by 256 for no reason. Then we find out that the corresponding field is 2 bytes and the so called multiplied by 256 is the result of the wrong endian.
+    \subparagraph{}
+    Another problem is that when the node in the external Internet tries to PING the gateway, the gateway have no idea whether it should reply by self or just pass the request to the nodes in the Intranet. This problem occurs in project3 part5 when we tried to establish a toynet. The way to solve this problem is previously define different patterns in PING request, related to the different node identity in the Intranet and the gateway can determine its behavior due to this pattern. Though we think the solution is not beautiful enough and the gateway in the real world should hide the existence of the internal nodes.
+
+\section{Tunnel}
+    \subparagraph{}
+    
+    The way described in the project requirement sheet says to use the {\tt iptables} utility in Linux command line, but this raise one problem because {\tt iptables} forwarding will drop the destination port information. However, since the destination port is randomly given by the remote server after the PASV command, we do not know which port our data stream should send to in our proxy. Therefore, we choose another common proxy protocol - SOCKS5, which packs the whole IP packet into one TCP packet. By this means, we can forward the packet through our acoustic tunnel correctly to the remote in WAN.
+
+    \subsection{SOCKS5 Proxy}
+        \subparagraph{}
+        We start a small threaded TCP server by an python class derived from {\tt ThreadingMixIn} and {\tt TCPServer} super classes. The server listens on port 1787 at localhost. After that, we set the FTP client, FileZilla to use the proxy on our local port. Then when a new TCP connection is established, a stream of SOCKS5 packet will be sent to my proxy. We then unpack the SOCKS5 packet and establish a TCP connection using our Athernet and send data through the Aocket. The proxy server runs in a loop so that the data can be exchanged between the SOCKS5 stream and the Aocket. The loop includes two part. One part is by making system call using ``select'' to get data from the local TCP connection stream, and make sure the thread does block but does not block forever. At the same time, we start a simple thread, waiting for the packet from the Aocket and send it to the proxy client.

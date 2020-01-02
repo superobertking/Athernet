@@ -1,0 +1,60 @@
+\chapter{Transport Layer}\label{ch:ch5label}
+
+The transport layer provides a network-to-application interface. We call our transport layer Aocket, just like the socket in POSIX. The Aocket object creates a IP object as a member variable. It encapsulates the data given by the applications to ICMP, UDP or TCP and pass to the network layer to transmit to the target peer.
+
+\section{ICMP}
+    \subparagraph{}
+    The {\tt TYPE} field for ICMP in the IP packet is 1.
+
+    \subsection{Structure}
+        \subparagraph{}
+        The structure of our ICMP packet is shown below. There {\tt TYPE} field has two types, PING and PONG, with value 0 and 3. They have the same meaning as the standard ICMP packet for echo and echo reply. The {\tt ID} field and {\tt PAYLOAD} field are the same as icmp\_id and pattern in the standard ICMP protocol.
+
+        $$ | TYPE(1B) | ID(1B) | PAYLOAD(var) |$$
+        
+    The PING packets are automatically replied as PONG packets with the same {\tt ID} and the same {\tt PAYLOAD} in the Aocket.
+
+\section{UDP}
+    \subparagraph{}
+    UDP is a simple User Datagram Protocol to transmit data between network hosts. Our UDP looks very similar to the standard UDP protocol. The {\tt TYPE} field for UDP in the IP packet is 2.
+
+    \subsection{Structure}
+        \subparagraph{}
+        The structure of our ICMP packet is shown below. The {\tt SRC\_PORT} and {\tt DST\_PORT} is the same as the standard UDP protocol. The size of the payload can be extracted from the IP packet in the lower layer so we emit that field.
+        
+        $$| SRC\_PORT(2B) | DST\_PORT(2B) | PAYLOAD(var) |$$
+    
+    \subsection{Multi-port Connection}\label{sec:mulport}
+        \subparagraph{}
+        Unlike {\tt socket}, which only supports binding to a single port and stick to only one protocol, our Aocket supports listening to multiple ports with different protocols at the same time. This is because we only have one Aocket instance for the entire Athernet node. However, it helps unlock a lot of potentials of our network. Each open ports has a separate queue to contain the packets we buffer in the Aocket. The sending and receiving operation can be done by specifying the local port in {\tt Aocket.send} and {\tt Aocket.recv}.
+
+\section{Toy TCP}
+    \subparagraph{}
+    Though we are not required to implement a fully functioning TCP, we still need one protocol to support state transitions of TCP, to support the transmission of FTP packets. Therefore we created a toy TCP that is very similar to the UDP we have, except for a new {\tt FLAG} field. The {\tt TYPE} field for TCP in the IP packet is 3.
+
+    \subsection{Structure}
+        \subparagraph{}
+        The structure of our toy TCP is shown as follows, it is mostly very similar to the UDP we have. The new {\tt TYPE} field is a subset of TCP flags in the standard TCP specification.
+        
+        $$| SRC\_PORT(2B) | DEST\_PORT(2B) | TYPE(1B) | PAYLOAD(var) |$$
+    
+    \subsection{Packet types}
+    
+        \subparagraph{}
+        We have four kinds of TCP packet in our toy TCP: SYN, FIN, DATA and a reserved but not implemented ACK.
+
+        \subparagraph{SYN}
+            This flag is for creating a connection between two nodes, which is the same flag in the TCP protocol. This packet can be sent by using {\tt Aocket.connect}. The difference from the TCP standard is that we do not do three-way handshake. The SYN is sent in one way from an Athernet LAN host to another Athernet LAN host. If the destination is indeed a WAN host, the gateway will help do the the handshaking by utilizing {\tt socket}. The {\tt TYPE} field has value 0.
+            
+        \subparagraph{ACK}
+            This flag is only reserved but not implemented. Though we lack the implementation of ACK, the transmission is still reliable between two Athernet nodes since the legacy code in our data link layer ensures the frame can be received correctly. The only problem for lacking ACK is when connecting hosts outside of the Athernet, but on other hand, the gateway uses {\tt socket} to handle ACK automatically, so we do not need to worry too much. The {\tt TYPE} field has value 1.
+        
+        \subparagraph{FIN}
+            This flag is for closing an existing connection between two nodes. This packet can be sent by using {\tt Aocket.close}. Like the SYN in our toy TCP, we do not do four-way handshake. The FIN is also sent from one in one way from an Athernet LAN host to another Athernet LAN host. If the destination is ideed a WAN host, the gateway will help do the four-way handshaking by utilizing {\tt socket} again. The {\tt TYPE} field has value 2.
+
+        \subparagraph{DATA}
+            This flag is for transmitting real data between two Athernet LAN nodes. This packet can be sent by using {\tt Aocket.send\_tcp}. This flag is different from the standard TCP protocol because it does not have a explicit DATA flag. When transmitting to a WAN address, the gateway uses {\tt socket.sendto} to forward the content data to the target host. The {\tt TYPE} field has value 3.
+
+    \subsection{Multi-port Connection}
+        \subparagraph{}
+        Just as mentioned in section \ref{sec:mulport}, the Aocket can also listen to multiple TCP port and send to multiple destinations at the same time.
