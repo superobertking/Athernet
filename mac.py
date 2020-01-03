@@ -263,7 +263,7 @@ class MAC(object):
 						ack_set.add(ack_frame_id)
 						window_set.add(ack_frame_id)
 				except queue.Empty:
-					print('WTF')
+					print('What')
 					break
 			print('acked: ', len(ack_set), ack_set)
 			print(window_list, window_set)
